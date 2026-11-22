@@ -6,13 +6,13 @@ The first standalone release ports the typed, fixture-tested **virtual cube core
 
 The imported `UDC_LIMITS` are deliberately conservative:
 
-| Budget                                 |  Value |
-| -------------------------------------- | -----: |
-| Cube inputs in current integration API |      2 |
-| Rows per source cube                   | 10,000 |
-| Columns per source                     |    100 |
-| Output observations                    | 10,000 |
-| Projected datasets per coverage query  |  1,000 |
+| Budget                                 |   Value |
+| -------------------------------------- | ------: |
+| Cube inputs in current integration API |       2 |
+| Rows per source cube                   |  10,000 |
+| Columns per source                     |     100 |
+| Output observations                    |  10,000 |
+| Projected datasets per coverage query  |   1,000 |
 | Projected coordinate contributions     | 100,000 |
 | Coverage summary coordinates           |  20,000 |
 

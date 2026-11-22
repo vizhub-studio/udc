@@ -8,7 +8,6 @@
 - Reject incompatible, uncanonicalized, duplicate, over-budget or revision-conflicting inputs without silently truncating or inventing coordinate coverage.
 - This work does not publish an npm release, alter any existing joins, or add an HTTP/MCP query endpoint.
 
-
 ## Unreleased — explicit sparse outer joins
 
 - Add left, right, and full joins to `integrateCubes`, retaining the default dense inner-join return contract.

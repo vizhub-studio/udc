@@ -66,7 +66,7 @@ const coverage = countDatasetCoverage(
 // coverage.observations[]: { cellKey, coordinate, datasetCount, datasetIds }
 ```
 
-The coverage example assumes `popCube` and `gdpCube` were independently canonicalized with reviewed exact mappings. For dimension-only datasets, pass `{ stage: "coordinate-dataset", snapshot, dimensions, coordinates }` with pre-canonicalized coordinates to `projectDatasetCoverage`. Counts represent coordinate *presence*, including rows with null measures. A country-only dataset cannot be projected onto Country × Year.
+The coverage example assumes `popCube` and `gdpCube` were independently canonicalized with reviewed exact mappings. For dimension-only datasets, pass `{ stage: "coordinate-dataset", snapshot, dimensions, coordinates }` with pre-canonicalized coordinates to `projectDatasetCoverage`. Counts represent coordinate _presence_, including rows with null measures. A country-only dataset cannot be projected onto Country × Year.
 
 Run `npm run example` for a real UN population × World Bank GDP example, including two different country-code systems.
 

@@ -115,16 +115,22 @@ describe("coordinate-only dataset coverage", () => {
     const result = projectDatasetCoverage(population, ["year", "country"]);
     expect(result.stage).toBe("dataset-coverage");
     expect(result.dimensions).toEqual([country, year]);
-    expect(result.snapshot).toEqual({ datasetId: "population", revision: "rev-1" });
+    expect(result.snapshot).toEqual({
+      datasetId: "population",
+      revision: "rev-1",
+    });
     expect(result.schemaRevisions).toEqual(["v1"]);
     expect(result.concordanceRevisions).toEqual(["mapping-set-v1"]);
     expect(result.coordinates.map((o) => o.cellKey)).toEqual(
       [key("CN", "2021"), key("US", "2020")].sort(),
     );
-    expect(result.coordinates.find((o) => o.cellKey === key("US", "2020"))?.sourceCoordinateCount)
-      .toBe(2);
-    expect(result.coordinates.every((o) => o.coordinate.members.length === 2))
-      .toBe(true);
+    expect(
+      result.coordinates.find((o) => o.cellKey === key("US", "2020"))
+        ?.sourceCoordinateCount,
+    ).toBe(2);
+    expect(
+      result.coordinates.every((o) => o.coordinate.members.length === 2),
+    ).toBe(true);
     expect(JSON.stringify(population)).toBe(before);
   });
 
@@ -136,8 +142,10 @@ describe("coordinate-only dataset coverage", () => {
     ]);
     const result = projectDatasetCoverage(source, ["country", "year"]);
     expect(result.coordinates).toHaveLength(2);
-    expect(result.coordinates.find((o) => o.cellKey === key("US", "2020"))?.sourceCoordinateCount)
-      .toBe(2);
+    expect(
+      result.coordinates.find((o) => o.cellKey === key("US", "2020"))
+        ?.sourceCoordinateCount,
+    ).toBe(2);
     expect("measures" in result).toBe(false);
     expect("values" in result.coordinates[0]).toBe(false);
   });
@@ -170,7 +178,10 @@ describe("coordinate-only dataset coverage", () => {
       ]),
       ["country", "year"],
     );
-    const summary = countDatasetCoverage([locations, gdp, population], [year, country]);
+    const summary = countDatasetCoverage(
+      [locations, gdp, population],
+      [year, country],
+    );
     expect(summary.stage).toBe("coverage-summary");
     expect(summary.dimensions).toEqual([country, year]);
     expect(summary.observations.map((o) => o.cellKey)).toEqual(
@@ -189,8 +200,9 @@ describe("coordinate-only dataset coverage", () => {
       datasetCount: 1,
       datasetIds: ["gdp"],
     });
-    expect(countDatasetCoverage([gdp, population, locations], [country, year]))
-      .toEqual(summary);
+    expect(
+      countDatasetCoverage([gdp, population, locations], [country, year]),
+    ).toEqual(summary);
   });
 
   it("deduplicates repeated uses of the same dataset while preserving snapshots", () => {
@@ -212,17 +224,22 @@ describe("coordinate-only dataset coverage", () => {
       { datasetId: "shared-hash", revision: "rev-1", vizId: "second" },
     ]);
     fail(
-      () => countDatasetCoverage(
-        [first, { ...second, snapshot: { ...second.snapshot, revision: "rev-2" } }],
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          [
+            first,
+            { ...second, snapshot: { ...second.snapshot, revision: "rev-2" } },
+          ],
+          [country, year],
+        ),
       "CONFLICT",
     );
     fail(
-      () => countDatasetCoverage(
-        [first, { ...second, concordanceRevisions: ["different-map"] }],
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          [first, { ...second, concordanceRevisions: ["different-map"] }],
+          [country, year],
+        ),
       "CONFLICT",
     );
   });
@@ -249,17 +266,22 @@ describe("coordinate-only dataset coverage", () => {
       observations: [],
       snapshots: [],
     });
-    const projectedEmpty = projectDatasetCoverage(countryYearDataset("empty", []), [
-      "country",
-      "year",
-    ]);
+    const projectedEmpty = projectDatasetCoverage(
+      countryYearDataset("empty", []),
+      ["country", "year"],
+    );
     expect(projectedEmpty.coordinates).toEqual([]);
-    expect(countDatasetCoverage([projectedEmpty], [country, year]).observations).toEqual([]);
+    expect(
+      countDatasetCoverage([projectedEmpty], [country, year]).observations,
+    ).toEqual([]);
   });
 
   it("supports a zero-dimension projection as one existence cell per nonempty dataset", () => {
     const first = projectDatasetCoverage(
-      countryYearDataset("first", [["US", "2020"], ["IN", "2021"]]),
+      countryYearDataset("first", [
+        ["US", "2020"],
+        ["IN", "2021"],
+      ]),
       [],
     );
     const second = projectDatasetCoverage(
@@ -267,7 +289,11 @@ describe("coordinate-only dataset coverage", () => {
       [],
     );
     expect(first.coordinates).toEqual([
-      { coordinate: { members: [] }, cellKey: getCellKey({ members: [] }), sourceCoordinateCount: 2 },
+      {
+        coordinate: { members: [] },
+        cellKey: getCellKey({ members: [] }),
+        sourceCoordinateCount: 2,
+      },
     ]);
     const summary = countDatasetCoverage([first, second], []);
     expect(summary.observations[0]).toMatchObject({
@@ -281,52 +307,92 @@ describe("coordinate-only dataset coverage", () => {
       { country: "US", year: "2020", sex: "F", value: "1" },
     ]);
     fail(
-      () => projectDatasetCoverage(
-        { ...source, snapshots: [...source.snapshots, { datasetId: "other" }] },
-        ["country", "year"],
-      ),
+      () =>
+        projectDatasetCoverage(
+          {
+            ...source,
+            snapshots: [...source.snapshots, { datasetId: "other" }],
+          },
+          ["country", "year"],
+        ),
       "INCOMPATIBLE",
     );
-    fail(() => projectDatasetCoverage(source, ["country", "country"]), "DUPLICATE");
+    fail(
+      () => projectDatasetCoverage(source, ["country", "country"]),
+      "DUPLICATE",
+    );
     fail(() => projectDatasetCoverage(source, ["unknown"]), "INCOMPATIBLE");
     const invalidCoded = {
       ...countryYearDataset("bad", [["US", "2020"]]),
       coordinates: [
-        { members: [codedRef("country", "country-codes", "v1", "US"), canonicalMember("year", "year:2020")] },
+        {
+          members: [
+            codedRef("country", "country-codes", "v1", "US"),
+            canonicalMember("year", "year:2020"),
+          ],
+        },
       ],
     };
     fail(
-      () => projectDatasetCoverage(invalidCoded as unknown as CanonicalCoordinateDataset, [
-        "country",
-        "year",
-      ]),
+      () =>
+        projectDatasetCoverage(
+          invalidCoded as unknown as CanonicalCoordinateDataset,
+          ["country", "year"],
+        ),
       "INCOMPATIBLE",
     );
-    const repeated = { ...source, observations: [...source.observations, ...source.observations] };
-    fail(() => projectDatasetCoverage(repeated, ["country", "year"]), "DUPLICATE");
+    const repeated = {
+      ...source,
+      observations: [...source.observations, ...source.observations],
+    };
+    fail(
+      () => projectDatasetCoverage(repeated, ["country", "year"]),
+      "DUPLICATE",
+    );
     const projected = projectDatasetCoverage(
       countryYearDataset("good", [["US", "2020"]]),
       ["country", "year"],
     );
     fail(
-      () => countDatasetCoverage(
-        [{ ...projected, coordinates: [...projected.coordinates, ...projected.coordinates] }],
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          [
+            {
+              ...projected,
+              coordinates: [...projected.coordinates, ...projected.coordinates],
+            },
+          ],
+          [country, year],
+        ),
       "DUPLICATE",
     );
     fail(
-      () => countDatasetCoverage(
-        [{ ...projected, coordinates: [{ ...projected.coordinates[0], cellKey: "invalid" }] }],
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          [
+            {
+              ...projected,
+              coordinates: [
+                { ...projected.coordinates[0], cellKey: "invalid" },
+              ],
+            },
+          ],
+          [country, year],
+        ),
       "DUPLICATE",
     );
     fail(
-      () => countDatasetCoverage(
-        [projected, { ...projected, stage: "canonical" } as unknown as ProjectedDatasetCoverage],
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          [
+            projected,
+            {
+              ...projected,
+              stage: "canonical",
+            } as unknown as ProjectedDatasetCoverage,
+          ],
+          [country, year],
+        ),
       "INCOMPATIBLE",
     );
   });
@@ -337,13 +403,18 @@ describe("coordinate-only dataset coverage", () => {
       ["country", "year"],
     );
     fail(
-      () => countDatasetCoverage(
-        Array(UDC_LIMITS.coverageDatasets + 1).fill(source),
-        [country, year],
-      ),
+      () =>
+        countDatasetCoverage(
+          Array(UDC_LIMITS.coverageDatasets + 1).fill(source),
+          [country, year],
+        ),
       "LIMIT",
     );
-    const make = (datasetId: string, from: number, count: number): ProjectedDatasetCoverage => ({
+    const make = (
+      datasetId: string,
+      from: number,
+      count: number,
+    ): ProjectedDatasetCoverage => ({
       stage: "dataset-coverage",
       snapshot: { datasetId },
       dimensions: [country, year],
@@ -356,14 +427,19 @@ describe("coordinate-only dataset coverage", () => {
             canonicalMember("year", "year:2020"),
           ],
         };
-        return { coordinate: c, cellKey: getCellKey(c), sourceCoordinateCount: 1 };
+        return {
+          coordinate: c,
+          cellKey: getCellKey(c),
+          sourceCoordinateCount: 1,
+        };
       }),
     });
     const a = make("a", 0, 10_000);
     const b = make("b", 10_000, 10_000);
     const c = make("c", 20_000, 1);
-    expect(countDatasetCoverage([a, b], [country, year]).observations)
-      .toHaveLength(UDC_LIMITS.coverageOutputCoordinates);
+    expect(
+      countDatasetCoverage([a, b], [country, year]).observations,
+    ).toHaveLength(UDC_LIMITS.coverageOutputCoordinates);
     fail(() => countDatasetCoverage([a, b, c], [country, year]), "LIMIT");
   });
 });

@@ -49,8 +49,7 @@ function validateRevisions(
   label: string,
 ): string[] {
   if (values === undefined) return [];
-  if (!Array.isArray(values))
-    throw new UdcError("INVALID", "Invalid " + label);
+  if (!Array.isArray(values)) throw new UdcError("INVALID", "Invalid " + label);
   assertBound(values.length, UDC_LIMITS.columns, label);
   for (const revision of values) assertId(revision, label);
   const result = sorted(values);
@@ -150,7 +149,11 @@ export function projectDatasetCoverage(
     source.stage === "canonical" ? source.observations : source.coordinates;
   if (!Array.isArray(coordinates))
     throw new UdcError("INVALID", "Invalid coverage observations");
-  assertBound(coordinates.length, UDC_LIMITS.rows, "coverage input coordinates");
+  assertBound(
+    coordinates.length,
+    UDC_LIMITS.rows,
+    "coverage input coordinates",
+  );
 
   const groups = new Map<
     string,
@@ -170,7 +173,8 @@ export function projectDatasetCoverage(
     const originalKey = getCellKey(coordinate);
     if (source.stage === "canonical") {
       if (
-        (item as CanonicalCube["observations"][number]).cellKey !== originalKey ||
+        (item as CanonicalCube["observations"][number]).cellKey !==
+          originalKey ||
         seenOriginal.has(originalKey)
       )
         throw new UdcError(
@@ -193,7 +197,11 @@ export function projectDatasetCoverage(
       });
     }
   }
-  assertBound(groups.size, UDC_LIMITS.outputObservations, "projected coordinates");
+  assertBound(
+    groups.size,
+    UDC_LIMITS.outputObservations,
+    "projected coordinates",
+  );
 
   return {
     stage: "dataset-coverage",
@@ -221,7 +229,11 @@ export function countDatasetCoverage(
 ): DatasetCoverageSummary {
   if (!Array.isArray(datasets))
     throw new UdcError("INVALID", "Invalid coverage datasets");
-  assertBound(datasets.length, UDC_LIMITS.coverageDatasets, "coverage datasets");
+  assertBound(
+    datasets.length,
+    UDC_LIMITS.coverageDatasets,
+    "coverage datasets",
+  );
   const ids = validateDimensions(dimensions);
   const retained = new Set(ids);
   const cells = new Map<
