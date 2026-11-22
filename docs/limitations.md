@@ -18,9 +18,10 @@ Core operations reject over-budget row/column counts rather than silently trunca
 ## Not implemented
 
 - Dataset HTTP fetching, downloadable semantic manifests or an automatic browser loader
-- Joins with unequal dimensions, left/full joins, aggregation, projections or unit conversions
+- Joins with unequal dimensions, coordinate-only projections, automatic aggregation, or unit conversions
 - Semantic inference, codelist auto-approval, hierarchy editing or persistent semantic governance
 - Public/private source authorization, access tokens, tenant policy or cross-origin proxying
+- Sparse-join aggregation or implicit missing-measure fills (non-inner results require an explicit policy)
 - Multi-cube execution planning, database pushdown, large files or Arrow/Parquet parsing
 - Persisted materialized cubes or remote registry/database APIs
 

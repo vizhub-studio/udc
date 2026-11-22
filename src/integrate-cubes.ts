@@ -1,10 +1,22 @@
-import type { CanonicalCube, Dimension, Observation, Member } from "./types";
+import type {
+  CanonicalCube,
+  Dimension,
+  Observation,
+  Member,
+  SparseIntegratedCube,
+  SparseIntegratedObservation,
+} from "./types";
 import { getCellKey } from "./coordinate";
 import { assertBound, assertId, UdcError, UDC_LIMITS } from "./limits";
+
+export type JoinMode = "inner" | "left" | "right" | "full";
+export type OuterJoinMode = Exclude<JoinMode, "inner">;
 export interface IntegrationOptions {
-  join: "inner";
+  join: JoinMode;
 }
+
 const stable = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 function validate(cube: CanonicalCube): Map<string, Observation<Member>> {
   if (cube.stage !== "canonical")
     throw new UdcError("INCOMPATIBLE", "Both cubes must be canonical");
@@ -38,24 +50,47 @@ function validate(cube: CanonicalCube): Map<string, Observation<Member>> {
       JSON.stringify(Object.keys(obs.values).sort(stable)) !==
       JSON.stringify(declaredMeasures)
     )
-      throw new UdcError(
-        "INCOMPATIBLE",
-        "Measure value set does not match definitions",
-      );
+      throw new UdcError("INCOMPATIBLE", "Measure value set does not match definitions");
     out.set(obs.cellKey, obs);
   }
   return out;
 }
-/** Strict inner join: same axis set and granularity, no measure overwrites. */
+
+/**
+ * Inner joins remain dense CanonicalCubes. Non-inner joins have an explicit
+ * sparse stage and presence flags, preserving absent-versus-null semantics.
+ */
+export function integrateCubes(
+  a: CanonicalCube,
+  b: CanonicalCube,
+  options?: { join: "inner" },
+): CanonicalCube;
+export function integrateCubes(
+  a: CanonicalCube,
+  b: CanonicalCube,
+  options: { join: OuterJoinMode },
+): SparseIntegratedCube;
+export function integrateCubes(
+  a: CanonicalCube,
+  b: CanonicalCube,
+  options: IntegrationOptions,
+): CanonicalCube | SparseIntegratedCube;
 export function integrateCubes(
   a: CanonicalCube,
   b: CanonicalCube,
   options: IntegrationOptions = { join: "inner" },
-): CanonicalCube {
-  if (options.join !== "inner")
-    throw new UdcError("INVALID", "Only inner joins are supported");
-  const left = validate(a),
-    right = validate(b);
+): CanonicalCube | SparseIntegratedCube {
+  const join = options?.join;
+  if (
+    join !== "inner" &&
+    join !== "left" &&
+    join !== "right" &&
+    join !== "full"
+  )
+    throw new UdcError("INVALID", "Unsupported join mode");
+
+  const left = validate(a);
+  const right = validate(b);
   const dimIds = (dims: readonly Dimension[]) =>
     dims.map((x) => x.id).sort(stable);
   if (
@@ -77,34 +112,26 @@ export function integrateCubes(
   for (const measure of b.measures)
     if (ids.has(measure.id))
       throw new UdcError("CONFLICT", "Duplicate measure identity");
-  const observations: Array<Observation<Member>> = [];
-  for (const [key, obs] of left) {
-    const other = right.get(key);
-    if (!other) continue;
-    for (const m of a.measures)
-      if (!(m.id in obs.values))
-        throw new UdcError("INCOMPATIBLE", "Missing left measure");
-    for (const m of b.measures)
-      if (!(m.id in other.values))
-        throw new UdcError("INCOMPATIBLE", "Missing right measure");
-    observations.push({
-      coordinate: obs.coordinate,
-      cellKey: key,
-      values: { ...obs.values, ...other.values },
-    });
-  }
-  assertBound(
-    observations.length,
-    UDC_LIMITS.outputObservations,
-    "integrated observations",
-  );
-  observations.sort((x, y) => stable(x.cellKey, y.cellKey));
+
+  const keys = [...new Set([...left.keys(), ...right.keys()])]
+    .filter((key) => {
+      const inLeft = left.has(key);
+      const inRight = right.has(key);
+      return join === "inner"
+        ? inLeft && inRight
+        : join === "left"
+          ? inLeft
+          : join === "right"
+            ? inRight
+            : true;
+    })
+    .sort(stable);
+  assertBound(keys.length, UDC_LIMITS.outputObservations, "integrated observations");
+
   const distinct = <T>(items: readonly T[]) => [...new Set(items)];
-  return {
-    stage: "canonical",
+  const shared = {
     dimensions: [...a.dimensions].sort((x, y) => stable(x.id, y.id)),
     measures: [...a.measures, ...b.measures],
-    observations,
     snapshots: distinct(
       [...a.snapshots, ...b.snapshots].map((x) => JSON.stringify(x)),
     ).map((x) => JSON.parse(x)),
@@ -117,4 +144,28 @@ export function integrateCubes(
       ...b.concordanceRevisions,
     ]).sort(stable),
   };
+  if (join === "inner") {
+    const observations: Observation<Member>[] = keys.map((key) => {
+      const leftObs = left.get(key)!;
+      const rightObs = right.get(key)!;
+      return {
+        coordinate: leftObs.coordinate,
+        cellKey: key,
+        values: { ...leftObs.values, ...rightObs.values },
+      };
+    });
+    return { stage: "canonical", ...shared, observations };
+  }
+
+  const observations: SparseIntegratedObservation[] = keys.map((key) => {
+    const leftObs = left.get(key);
+    const rightObs = right.get(key);
+    return {
+      coordinate: (leftObs ?? rightObs)!.coordinate,
+      cellKey: key,
+      values: { ...leftObs?.values, ...rightObs?.values },
+      presence: { left: leftObs !== undefined, right: rightObs !== undefined },
+    };
+  });
+  return { stage: "sparse-integrated", join, ...shared, observations };
 }

@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased — explicit sparse outer joins
+
+- Add left, right, and full joins to `integrateCubes`, retaining the default dense inner-join return contract.
+- Introduce distinct `SparseIntegratedCube` and `SparseIntegratedObservation` results with left/right coordinate-presence flags and absent measure keys, preserving observed nulls and source-row provenance.
+- Allow `sliceCube` to retain sparse join semantics; no outer-join aggregation, cross-grain joining, or coverage query is introduced.
+- This is unreleased source work; do not claim that the published `@vizhub/udc@2.0.0` includes outer joins.
+
 ## Unreleased — breaking removal of CSV/TSV parser
 
 - Remove `parseTabular`, `TabularRows`, and the parser-only `UDC_LIMITS.fileBytes` from the public API. Callers now pass pre-parsed records to `createCube`.
