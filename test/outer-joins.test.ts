@@ -183,7 +183,7 @@ describe("explicit outer joins", () => {
       swapped.observations.find((o) => o.cellKey === key("CN", "2021"))
         ?.presence,
     ).toEqual({ left: false, right: true });
-    const empty = cube("gdp", []);
+    const empty = { ...right(), observations: [] };
     expect(integrateCubes(a, empty).observations).toEqual([]);
     const outer = integrateCubes(a, empty, { join: "full" });
     expect(outer.observations).toHaveLength(2);
