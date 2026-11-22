@@ -38,4 +38,12 @@ Non-inner joins return a distinct `SparseIntegratedCube` stage. A joined coordin
 
 `sliceCube` selects observations at one canonical member and removes the selected axis, preserving measure lineage and sparse presence. Neither operation implicitly aggregates, fills missing values, projects across unequal axes, nor equates approximate mappings with exact equivalence. Sparse results are deliberately ineligible for `aggregateCube` until reduction semantics are explicitly defined.
 
+## Coordinate presence and dataset coverage
+
+Coverage asks *whether a dataset has a canonical observation at a coordinate*, not how numeric values should be combined. `projectDatasetCoverage` projects a single dataset's canonical coordinates onto requested dimensions and collapses repeated projected keys. A dataset at Country × Year × Sex can therefore claim Country × Year coverage without summing a population count or averaging a percentage. An observed row whose measure is null still establishes coordinate presence. A dimension-only dataset uses `CanonicalCoordinateDataset` with approved, canonical members and requires no artificial measure.
+
+`countDatasetCoverage` combines projected per-dataset results, counting unique `datasetId` contributors at each observed coordinate and returning those IDs alongside the counts. Repeated rows, measures, or use records never inflate the total; snapshots and semantic revisions remain traceable. Each input must support *all* requested output dimensions. Country-only data cannot claim every year. The result includes only observed coordinates, not a complete Cartesian grid of possible countries and years.
+
+These primitives consume explicitly canonicalized coordinates; they do not approve geographic equivalences, infer axes, fetch datasets, or perform authorization. The VizHub backend must select and authorize each source *before* passing it to this package.
+
 See [the full API reference](api.md) and [documented limits](limitations.md).
