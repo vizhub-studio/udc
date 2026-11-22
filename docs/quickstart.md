@@ -50,6 +50,24 @@ The resulting `SourceCube` retains original **coded** members. For integration:
 
 A non-inner join returns `SparseIntegratedCube`, not `CanonicalCube`. At every coordinate, inspect `presence.left`/`presence.right` to identify source availability and check whether `values` has a measure key. An absent measure has no key or provenance; a present measure may legitimately have a null `value`. These sparse results may be sliced but not implicitly rolled up.
 
+```ts
+import { projectDatasetCoverage, countDatasetCoverage } from "@vizhub/udc";
+
+// Two canonical single-source cubes may have different original dimensions.
+const popCoverage = projectDatasetCoverage(popCube, ["country", "year"]);
+const gdpCoverage = projectDatasetCoverage(gdpCube, ["country", "year"]);
+const coverage = countDatasetCoverage(
+  [popCoverage, gdpCoverage],
+  [
+    { id: "country", name: "Country" },
+    { id: "year", name: "Year" },
+  ],
+);
+// coverage.observations[]: { cellKey, coordinate, datasetCount, datasetIds }
+```
+
+The coverage example assumes `popCube` and `gdpCube` were independently canonicalized with reviewed exact mappings. For dimension-only datasets, pass `{ stage: "coordinate-dataset", snapshot, dimensions, coordinates }` with pre-canonicalized coordinates to `projectDatasetCoverage`. Counts represent coordinate *presence*, including rows with null measures. A country-only dataset cannot be projected onto Country × Year.
+
 Run `npm run example` for a real UN population × World Bank GDP example, including two different country-code systems.
 
 ### Browser delivery
