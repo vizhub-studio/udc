@@ -112,8 +112,10 @@ export interface SparseIntegratedObservation {
 }
 
 /** Outer-join outputs cannot masquerade as complete CanonicalCubes. */
-export interface SparseIntegratedCube
-  extends Omit<CubeBase<Member>, "observations"> {
+export interface SparseIntegratedCube extends Omit<
+  CubeBase<Member>,
+  "observations"
+> {
   stage: "sparse-integrated";
   join: "left" | "right" | "full";
   observations: readonly SparseIntegratedObservation[];

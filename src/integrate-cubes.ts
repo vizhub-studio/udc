@@ -50,7 +50,10 @@ function validate(cube: CanonicalCube): Map<string, Observation<Member>> {
       JSON.stringify(Object.keys(obs.values).sort(stable)) !==
       JSON.stringify(declaredMeasures)
     )
-      throw new UdcError("INCOMPATIBLE", "Measure value set does not match definitions");
+      throw new UdcError(
+        "INCOMPATIBLE",
+        "Measure value set does not match definitions",
+      );
     out.set(obs.cellKey, obs);
   }
   return out;
@@ -126,7 +129,11 @@ export function integrateCubes(
             : true;
     })
     .sort(stable);
-  assertBound(keys.length, UDC_LIMITS.outputObservations, "integrated observations");
+  assertBound(
+    keys.length,
+    UDC_LIMITS.outputObservations,
+    "integrated observations",
+  );
 
   const distinct = <T>(items: readonly T[]) => [...new Set(items)];
   const shared = {

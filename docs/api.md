@@ -12,9 +12,9 @@ All documented functions and types are exported from `@vizhub/udc` and `src/inde
 | `memberIdentity`          | `(member: MemberRef) => string`; canonical identity string used inside cell keys                                                     |
 | `resolveConcordance`      | `(mappings, {revision, at?}) => Concordance`                                                                                         |
 | `canonicalizeCube`        | `(source, concordance) => CanonicalCube`                                                                                             |
-| `integrateCubes`          | `(a, b, {join:"inner"}) => CanonicalCube`; `left`/`right`/`full` return `SparseIntegratedCube`                                        |
+| `integrateCubes`          | `(a, b, {join:"inner"}) => CanonicalCube`; `left`/`right`/`full` return `SparseIntegratedCube`                                       |
 | `aggregateCube`           | `(canonicalOrAggregatedCube, retainedDimensionIds) => AggregatedCube`; explicitly reduce coordinates using declared measure policies |
-| `sliceCube`               | `(cube, member) => CanonicalCube | SparseIntegratedCube` (same stage as input)                                                            |
+| `sliceCube`               | `(cube, member) => CanonicalCube                                                                                                     | SparseIntegratedCube` (same stage as input) |
 | `UDC_LIMITS`              | Exported resource ceilings; see [limits](limitations.md)                                                                             |
 | `UdcError`                | Typed exception with `code: UdcErrorCode`                                                                                            |
 | `assertId`, `assertBound` | Low-level validators that throw `UdcError` on invalid identifiers or exhausted budgets                                               |

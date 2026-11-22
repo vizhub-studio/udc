@@ -16,16 +16,22 @@ export function sliceCube(
   member: Member,
 ): CanonicalCube | SparseIntegratedCube {
   if (cube.stage !== "canonical" && cube.stage !== "sparse-integrated")
-    throw new UdcError("INCOMPATIBLE", "Expected canonical or sparse-integrated cube");
+    throw new UdcError(
+      "INCOMPATIBLE",
+      "Expected canonical or sparse-integrated cube",
+    );
   memberIdentity(member);
   if (!cube.dimensions.some((d) => d.id === member.dimensionId))
     throw new UdcError("INCOMPATIBLE", "Member dimension not in cube");
   const dimensions = cube.dimensions.filter((x) => x.id !== member.dimensionId);
   if (cube.stage === "canonical") {
     const observations = cube.observations.flatMap((obs) => {
-      if (!obs.coordinate.members.some(
-        (m) => m.dimensionId === member.dimensionId && m.id === member.id,
-      )) return [];
+      if (
+        !obs.coordinate.members.some(
+          (m) => m.dimensionId === member.dimensionId && m.id === member.id,
+        )
+      )
+        return [];
       const coordinate = {
         members: obs.coordinate.members.filter(
           (m) => m.dimensionId !== member.dimensionId,
@@ -36,9 +42,12 @@ export function sliceCube(
     return { ...cube, dimensions, observations };
   }
   const observations = cube.observations.flatMap((obs) => {
-    if (!obs.coordinate.members.some(
-      (m) => m.dimensionId === member.dimensionId && m.id === member.id,
-    )) return [];
+    if (
+      !obs.coordinate.members.some(
+        (m) => m.dimensionId === member.dimensionId && m.id === member.id,
+      )
+    )
+      return [];
     const coordinate = {
       members: obs.coordinate.members.filter(
         (m) => m.dimensionId !== member.dimensionId,

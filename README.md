@@ -75,7 +75,7 @@ const cube = createCube(
 | `validateSemanticSchema(schema, columns?)`                    | Validate schema mappings, IDs, and field coverage                               |
 | `resolveConcordance(mappings, context)`                       | Verified exact-equivalence closure with conflicts                               |
 | `canonicalizeCube(source, concordance)`                       | Translate coded coordinates to canonical member identities                      |
-| `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain         |
+| `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
 | `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none` policy |
 | `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
 

@@ -39,33 +39,55 @@ function cube(measureId: string, rows: Row[]): CanonicalCube {
     id: "schema:" + measureId,
     revision: "v1",
     dimensions: [
-      { field: "country", dimension: country, codelist: { id: "country-codes", revision: "v1" } },
-      { field: "year", dimension: year, codelist: { id: "year-codes", revision: "v1" } },
+      {
+        field: "country",
+        dimension: country,
+        codelist: { id: "country-codes", revision: "v1" },
+      },
+      {
+        field: "year",
+        dimension: year,
+        codelist: { id: "year-codes", revision: "v1" },
+      },
     ],
-    measures: [{
-      field: "value",
-      measure: { id: measureId, name: measureId, unit: measureId === "population" ? "persons" : "USD", aggregation: "sum" },
-      scale: 1,
-    }],
+    measures: [
+      {
+        field: "value",
+        measure: {
+          id: measureId,
+          name: measureId,
+          unit: measureId === "population" ? "persons" : "USD",
+          aggregation: "sum",
+        },
+        scale: 1,
+      },
+    ],
   };
   return canonicalizeCube(
-    createCube(rows, schema, { datasetId: "dataset:" + measureId, revision: "r1" }),
+    createCube(rows, schema, {
+      datasetId: "dataset:" + measureId,
+      revision: "r1",
+    }),
     concordance,
   );
 }
-const left = () => cube("population", [
-  { country: "US", year: "2020", value: "0" },
-  { country: "CN", year: "2021", value: "" },
-]);
-const right = () => cube("gdp", [
-  { country: "US", year: "2020", value: "42" },
-  { country: "IN", year: "2021", value: "17" },
-]);
+const left = () =>
+  cube("population", [
+    { country: "US", year: "2020", value: "0" },
+    { country: "CN", year: "2021", value: "" },
+  ]);
+const right = () =>
+  cube("gdp", [
+    { country: "US", year: "2020", value: "42" },
+    { country: "IN", year: "2021", value: "17" },
+  ]);
 const key = (code: string, y: string) =>
-  getCellKey({ members: [
-    canonicalMember("country", "country:" + code),
-    canonicalMember("year", "year:" + y),
-  ] });
+  getCellKey({
+    members: [
+      canonicalMember("country", "country:" + code),
+      canonicalMember("year", "year:" + y),
+    ],
+  });
 const has = (values: object, measure: string) =>
   Object.prototype.hasOwnProperty.call(values, measure);
 const expectCode = (f: () => unknown, code: UdcError["code"]) => {
@@ -86,7 +108,9 @@ describe("explicit outer joins", () => {
     const explicit = integrateCubes(a, b, { join: "inner" });
     expect(implicit).toEqual(explicit);
     expect(implicit.stage).toBe("canonical");
-    expect(implicit.observations.map((o) => o.cellKey)).toEqual([key("US", "2020")]);
+    expect(implicit.observations.map((o) => o.cellKey)).toEqual([
+      key("US", "2020"),
+    ]);
     expect(implicit.observations[0].values.population.value).toBe(0);
     expect(implicit.observations[0].values.gdp.value).toBe(42);
   });
@@ -101,13 +125,21 @@ describe("explicit outer joins", () => {
     expect(full.observations.map((o) => o.cellKey)).toEqual(
       [key("US", "2020"), key("CN", "2021"), key("IN", "2021")].sort(),
     );
-    const shared = full.observations.find((o) => o.cellKey === key("US", "2020"))!;
+    const shared = full.observations.find(
+      (o) => o.cellKey === key("US", "2020"),
+    )!;
     expect(shared.presence).toEqual({ left: true, right: true });
     expect(shared.values.population?.value).toBe(0);
     expect(shared.values.gdp?.value).toBe(42);
-    expect(shared.values.population?.provenance.snapshot.datasetId).toBe("dataset:population");
-    expect(shared.values.gdp?.provenance.snapshot.datasetId).toBe("dataset:gdp");
-    const onlyLeft = full.observations.find((o) => o.cellKey === key("CN", "2021"))!;
+    expect(shared.values.population?.provenance.snapshot.datasetId).toBe(
+      "dataset:population",
+    );
+    expect(shared.values.gdp?.provenance.snapshot.datasetId).toBe(
+      "dataset:gdp",
+    );
+    const onlyLeft = full.observations.find(
+      (o) => o.cellKey === key("CN", "2021"),
+    )!;
     expect(onlyLeft.presence).toEqual({ left: true, right: false });
     expect(has(onlyLeft.values, "population")).toBe(true);
     expect(onlyLeft.values.population?.value).toBeNull();
@@ -119,7 +151,9 @@ describe("explicit outer joins", () => {
       concordanceRevision: "concordance:v1",
       mappingRevisions: ["mapping:v1"],
     });
-    const onlyRight = full.observations.find((o) => o.cellKey === key("IN", "2021"))!;
+    const onlyRight = full.observations.find(
+      (o) => o.cellKey === key("IN", "2021"),
+    )!;
     expect(onlyRight.presence).toEqual({ left: false, right: true });
     expect(has(onlyRight.values, "population")).toBe(false);
     expect(onlyRight.values.gdp?.value).toBe(17);
@@ -145,14 +179,20 @@ describe("explicit outer joins", () => {
     expect(swapped.observations.map((o) => o.cellKey)).toEqual(
       integrateCubes(a, b, { join: "full" }).observations.map((o) => o.cellKey),
     );
-    expect(swapped.observations.find((o) => o.cellKey === key("CN", "2021"))?.presence)
-      .toEqual({ left: false, right: true });
+    expect(
+      swapped.observations.find((o) => o.cellKey === key("CN", "2021"))
+        ?.presence,
+    ).toEqual({ left: false, right: true });
     const empty = cube("gdp", []);
     expect(integrateCubes(a, empty).observations).toEqual([]);
     const outer = integrateCubes(a, empty, { join: "full" });
     expect(outer.observations).toHaveLength(2);
-    expect(outer.observations.every((o) => o.presence.left && !o.presence.right)).toBe(true);
-    expect(integrateCubes(empty, a, { join: "right" }).observations).toHaveLength(2);
+    expect(
+      outer.observations.every((o) => o.presence.left && !o.presence.right),
+    ).toBe(true);
+    expect(
+      integrateCubes(empty, a, { join: "right" }).observations,
+    ).toHaveLength(2);
   });
 
   it("slices sparse results without inserting values or changing availability", () => {
@@ -162,12 +202,22 @@ describe("explicit outer joins", () => {
     expect(at2021.join).toBe("full");
     expect(at2021.dimensions).toEqual([country]);
     expect(at2021.observations).toHaveLength(2);
-    const byCode = new Map(at2021.observations.map((o) => [o.coordinate.members[0].id, o]));
-    expect(byCode.get("country:CN")?.presence).toEqual({ left: true, right: false });
+    const byCode = new Map(
+      at2021.observations.map((o) => [o.coordinate.members[0].id, o]),
+    );
+    expect(byCode.get("country:CN")?.presence).toEqual({
+      left: true,
+      right: false,
+    });
     expect(byCode.get("country:CN")?.values.population?.value).toBeNull();
     expect(has(byCode.get("country:CN")!.values, "gdp")).toBe(false);
-    expect(byCode.get("country:IN")?.presence).toEqual({ left: false, right: true });
-    expect(sliceCube(at2021, canonicalMember("country", "country:US")).observations).toEqual([]);
+    expect(byCode.get("country:IN")?.presence).toEqual({
+      left: false,
+      right: true,
+    });
+    expect(
+      sliceCube(at2021, canonicalMember("country", "country:US")).observations,
+    ).toEqual([]);
     expect(joined.dimensions).toHaveLength(2);
   });
 
@@ -179,20 +229,29 @@ describe("explicit outer joins", () => {
         () => integrateCubes(a, { ...b, dimensions: [country] }, { join }),
         "INCOMPATIBLE",
       );
+      expectCode(() => integrateCubes(a, a, { join }), "CONFLICT");
       expectCode(
-        () => integrateCubes(a, a, { join }),
-        "CONFLICT",
-      );
-      expectCode(
-        () => integrateCubes(a, {
-          ...b, observations: [...b.observations, ...b.observations],
-        }, { join }),
+        () =>
+          integrateCubes(
+            a,
+            {
+              ...b,
+              observations: [...b.observations, ...b.observations],
+            },
+            { join },
+          ),
         "DUPLICATE",
       );
       expectCode(
-        () => integrateCubes(a, {
-          ...b, observations: [{ ...b.observations[0], values: {} }],
-        }, { join }),
+        () =>
+          integrateCubes(
+            a,
+            {
+              ...b,
+              observations: [{ ...b.observations[0], values: {} }],
+            },
+            { join },
+          ),
         "INCOMPATIBLE",
       );
     }
@@ -208,17 +267,22 @@ describe("explicit outer joins", () => {
     function many(cube: CanonicalCube, start: number): CanonicalCube {
       return {
         ...cube,
-        observations: Array.from({ length: UDC_LIMITS.outputObservations / 2 + 1 }, (_, index) => {
-          const coordinate = { members: [
-            canonicalMember("country", "country:" + (start + index)),
-            canonicalMember("year", "year:2020"),
-          ] };
-          return {
-            ...cube.observations[0],
-            coordinate,
-            cellKey: getCellKey(coordinate),
-          };
-        }),
+        observations: Array.from(
+          { length: UDC_LIMITS.outputObservations / 2 + 1 },
+          (_, index) => {
+            const coordinate = {
+              members: [
+                canonicalMember("country", "country:" + (start + index)),
+                canonicalMember("year", "year:2020"),
+              ],
+            };
+            return {
+              ...cube.observations[0],
+              coordinate,
+              cellKey: getCellKey(coordinate),
+            };
+          },
+        ),
       };
     }
     const a = many(seedA, 0);
