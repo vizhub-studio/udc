@@ -8,3 +8,4 @@ export * from "./canonicalize-cube";
 export * from "./integrate-cubes";
 export * from "./slice-cube";
 export * from "./aggregate-cube";
+export * from "./coverage";
