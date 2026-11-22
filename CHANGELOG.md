@@ -1,5 +1,14 @@
 # Change log
 
+## Unreleased — coordinate projection and dataset coverage
+
+- Add `projectDatasetCoverage` to deduplicate the projection of a single canonical dataset's observed coordinates, independently of measures or aggregation policies.
+- Support measure-less `CanonicalCoordinateDataset` sources and retain dataset snapshots and semantic revision pins.
+- Add `countDatasetCoverage` for deterministic distinct-dataset counts and contributing dataset IDs across different input grains sharing the selected output axes.
+- Reject incompatible, uncanonicalized, duplicate, over-budget or revision-conflicting inputs without silently truncating or inventing coordinate coverage.
+- This work does not publish an npm release, alter any existing joins, or add an HTTP/MCP query endpoint.
+
+
 ## Unreleased — explicit sparse outer joins
 
 - Add left, right, and full joins to `integrateCubes`, retaining the default dense inner-join return contract.
