@@ -32,6 +32,10 @@ No hierarchy lookup, source-unit conversion, weighted rate calculation, implicit
 
 ## Integration and slicing
 
-`integrateCubes` performs an **inner join only** between canonical cubes with the same dimension set and granularity. It refuses duplicate measure IDs. `sliceCube` selects observations at one canonical member and removes the selected axis, preserving measure lineage. Neither operation implicitly aggregates or fills missing values.
+`integrateCubes` defaults to an **inner join** between canonical cubes with the same dimension set and granularity; it also accepts `left`, `right`, and `full` join modes. It refuses duplicate measure IDs, collisions, or incompatible grain. Only the inner join returns a fully populated `CanonicalCube`.
+
+Non-inner joins return a distinct `SparseIntegratedCube` stage. A joined coordinate carries `presence.left` and `presence.right` flags, and its `values` object omits all keys belonging to an absent side. This differs from an observed coordinate with a present `MeasureValue` whose `value` is `null`. Never synthesize missing-value provenance. Source snapshots, schema/concordance revisions, and present measure provenance remain intact.
+
+`sliceCube` selects observations at one canonical member and removes the selected axis, preserving measure lineage and sparse presence. Neither operation implicitly aggregates, fills missing values, projects across unequal axes, nor equates approximate mappings with exact equivalence. Sparse results are deliberately ineligible for `aggregateCube` until reduction semantics are explicitly defined.
 
 See [the full API reference](api.md) and [documented limits](limitations.md).

@@ -4,7 +4,7 @@ A small, framework-independent TypeScript library for **semantic integration of 
 
 This is the modern continuation of [Curran Kelleher's original 2014 Universal Data Cube project](https://github.com/curran/udc/tree/gh-pages). The previous AMD/RequireJS version, tests, and annotated documentation are preserved on the historical `gh-pages` branch. The new implementation imports the typed in-memory core and pure golden tests developed in VizHub AI Studio, with provider-neutral snapshot identifiers.
 
-> **Release status:** `@vizhub/udc@1.2.0` is the aggregation-aware release prepared from this repository. If npm still serves `1.1.0`, that artifact predates the aggregation-aware API. The package contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
+> **Release status:** The repository declares `@vizhub/udc@2.0.0`. The outer-join API described below is an **unreleased source change** until a subsequent npm publication. The package contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
 
 ## Watch the presentation
 
@@ -81,9 +81,11 @@ const cube = createCube(
 | `validateSemanticSchema(schema, columns?)`                    | Validate schema mappings, IDs, and field coverage                               |
 | `resolveConcordance(mappings, context)`                       | Verified exact-equivalence closure with conflicts                               |
 | `canonicalizeCube(source, concordance)`                       | Translate coded coordinates to canonical member identities                      |
-| `integrateCubes(a, b)`                                        | Strict inner join over identical canonical dimensions                           |
+| `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
 | `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none` policy |
 | `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
+
+Inner joins return dense `CanonicalCube` values as before. Left/right/full joins return a distinct `SparseIntegratedCube`: `presence.left` and `presence.right` identify which source observed each coordinate. A source absent at a coordinate has **no measure property**; a present source reporting a null has a measure property whose `value` is `null`. Sparse results may be sliced, but cannot be implicitly aggregated or passed back as canonical input.
 
 The implementation deliberately rejects unknown or non-equivalent identifiers, duplicate measure identities, incompatible grains, ambiguous mappings and over-budget operations. There is no guesswork or implicit aggregation.
 

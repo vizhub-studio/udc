@@ -97,6 +97,29 @@ export interface SourceCube extends CubeBase<CodedMemberRef> {
 export interface CanonicalCube extends CubeBase<Member> {
   stage: "canonical";
 }
+
+/**
+ * A non-inner join deliberately has a distinct stage. Missing measure keys mean
+ * that the source has no observation at this coordinate; a present MeasureValue
+ * with value: null means the source observed the coordinate but reported null.
+ * No synthetic value or provenance is created for an absent observation.
+ */
+export interface SparseIntegratedObservation {
+  coordinate: Coordinate<Member>;
+  cellKey: CellKey;
+  values: Readonly<Partial<Record<string, MeasureValue>>>;
+  presence: Readonly<{ left: boolean; right: boolean }>;
+}
+
+/** Outer-join outputs cannot masquerade as complete CanonicalCubes. */
+export interface SparseIntegratedCube extends Omit<
+  CubeBase<Member>,
+  "observations"
+> {
+  stage: "sparse-integrated";
+  join: "left" | "right" | "full";
+  observations: readonly SparseIntegratedObservation[];
+}
 /** Reusable sufficient statistics for compositional roll-ups. */
 export interface AggregateAccumulator {
   sum: number;
