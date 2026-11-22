@@ -44,8 +44,8 @@ const cube = createCube(
 The resulting `SourceCube` retains original **coded** members. For integration:
 
 1. Provide explicitly reviewed `CodeMapping` records that assign coded source members to stable canonical members.
-2. Build a resolver using `resolveConcordance(mappings, { revision })`, optionally specifying `at` for effective-dated mappings.
-3. Call `canonicalizeCube(source, resolver)` for each source.
+2. Build a concordance using `resolveConcordance(mappings, { revision })`, optionally specifying `at` for effective-dated mappings.
+3. Call `canonicalizeCube(source, concordance)` for each source.
 4. Call `integrateCubes(a, b)` for strict inner-join integration, or pass `{ join: "left" | "right" | "full" }` to retain coordinates missing from one side. All joins still require identical canonical dimension sets and grain. `sliceCube(result, member)` preserves either result stage.
 
 A non-inner join returns `SparseIntegratedCube`, not `CanonicalCube`. At every coordinate, inspect `presence.left`/`presence.right` to identify source availability and check whether `values` has a measure key. An absent measure has no key or provenance; a present measure may legitimately have a null `value`. These sparse results may be sliced but not implicitly rolled up.
