@@ -90,10 +90,7 @@ function evidence(
   if (!Number.isSafeInteger(input.sourceRow) || input.sourceRow < 1)
     throw new UdcError("INVALID", "Invalid hierarchy source row");
   assertId(input.mappingRevision, "hierarchy mapping revision");
-  if (
-    (input.childSource === undefined) !==
-    (input.parentSource === undefined)
-  )
+  if ((input.childSource === undefined) !== (input.parentSource === undefined))
     throw new UdcError("INVALID", "Both hierarchy source codes are required");
   return {
     snapshot: { ...input.snapshot },
@@ -136,7 +133,9 @@ export function createHierarchy(definition: HierarchyDefinition): Hierarchy {
       definition.edition.length === 0 ||
       definition.edition.length > 120 ||
       definition.edition.trim() !== definition.edition ||
-      /[\u0000-\u001f\u007f]/.test(definition.edition))
+      [...definition.edition].some(
+        (char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127,
+      ))
   )
     throw new UdcError("INVALID", "Invalid hierarchy edition");
   if (!Array.isArray(definition.edges))
@@ -170,8 +169,7 @@ export function createHierarchy(definition: HierarchyDefinition): Hierarchy {
   }
 
   const parents = new Map<string, Member>();
-  for (const [childId, edge] of byChild)
-    parents.set(childId, edge.parent);
+  for (const [childId, edge] of byChild) parents.set(childId, edge.parent);
 
   // Iterative traversal avoids stack overflows for deep, but bounded, forests.
   const done = new Set<string>();

@@ -15,8 +15,5 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
-      - run: |
-          npx prettier --write src/hierarchy.ts test/hierarchy.test.ts docs/api.md docs/migration-from-2014.md
-          node -e 'const fs = require("fs"); for (const path of ["src/hierarchy.ts", "test/hierarchy.test.ts", "docs/api.md", "docs/migration-from-2014.md"]) console.log("UDC_FORMATTED_FILE=" + JSON.stringify({path, content: fs.readFileSync(path, "utf8")}));'
       - run: npm run check
       - run: npm run example

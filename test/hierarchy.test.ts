@@ -33,9 +33,7 @@ const edge = (
   parent: member(parent),
   provenance: provenance(row),
 });
-const definition = (
-  edges: HierarchyEdgeInput[],
-): HierarchyDefinition => ({
+const definition = (edges: HierarchyEdgeInput[]): HierarchyDefinition => ({
   key: "un-m49",
   dimensionId: "space",
   revision: "snapshot:v1",
@@ -120,10 +118,7 @@ describe("versioned canonical member hierarchies", () => {
     rejects(
       () =>
         createHierarchy(
-          definition([
-            edge("india", "asia", 1),
-            edge("india", "europe", 2),
-          ]),
+          definition([edge("india", "asia", 1), edge("india", "europe", 2)]),
         ),
       "CONFLICT",
     );
@@ -174,10 +169,14 @@ describe("versioned canonical member hierarchies", () => {
     );
     rejects(
       () =>
-        createHierarchy(definition([{
-          ...edge("india", "asia", 1),
-          child: codedRef("space", "m49", "2026", "356"),
-        } as unknown as HierarchyEdgeInput])),
+        createHierarchy(
+          definition([
+            {
+              ...edge("india", "asia", 1),
+              child: codedRef("space", "m49", "2026", "356"),
+            } as unknown as HierarchyEdgeInput,
+          ]),
+        ),
       "INVALID",
     );
     const hierarchy = createHierarchy(definition([edge("india", "asia", 1)]));
@@ -191,9 +190,7 @@ describe("versioned canonical member hierarchies", () => {
     rejects(
       () =>
         createHierarchy(
-          definition([
-            { ...edge("india", "asia", 1), provenance: undefined! },
-          ]),
+          definition([{ ...edge("india", "asia", 1), provenance: undefined! }]),
         ),
       "INVALID",
     );

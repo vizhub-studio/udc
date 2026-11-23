@@ -14,7 +14,7 @@ All documented functions and types are exported from `@vizhub/udc` and `src/inde
 | `canonicalizeCube`        | `(source, concordance) => CanonicalCube`                                                                                            |
 | `integrateCubes`          | `(a, b, {join:"inner"}) => CanonicalCube`; `left`/`right`/`full` return `SparseIntegratedCube`                                      |
 | `aggregateCube`           | `(canonicalOrAggregatedCube, retainDimensionIds) => AggregatedCube`; explicitly reduce coordinates using declared measure policies  |
-| `createHierarchy`         | `(definition: HierarchyDefinition) => Hierarchy`; deterministic, validated canonical parent/ancestor traversal without IO            |
+| `createHierarchy`         | `(definition: HierarchyDefinition) => Hierarchy`; deterministic, validated canonical parent/ancestor traversal without IO           |
 | `sliceCube`               | `(cube, member) => CanonicalCube                                                                                                    | SparseIntegratedCube` (same stage as input) |
 | `UDC_LIMITS`              | Exported resource ceilings; see [limits](limitations.md)                                                                            |
 | `UdcError`                | Typed exception with `code: UdcErrorCode`                                                                                           |
