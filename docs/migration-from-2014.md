@@ -10,7 +10,7 @@ The original `curran/udc` library was written for RequireJS/AMD and bundled via 
 | `createThesaurus(tables)`              | `resolveConcordance(explicitMappings, context)`                                   |
 | `mergeCubes(a,b,thesaurus)`            | `canonicalizeCube` on each, then `integrateCubes(a,b)`                            |
 | `slice(cube,member)`                   | `sliceCube(cube,canonicalMember)`                                                 |
-| `Hierarchy`, `mergeHierarchies`        | Not yet implemented                                                               |
+| `Hierarchy`, `mergeHierarchies`        | No drop-in aliases; use `createHierarchy` for validated canonical member forests (no merging or rollups)                                                               |
 
 The previous join implementation chose the left source's cells and could overwrite conflicting measures. Modern UDC performs a strict inner join with explicit dimension and measure conflict errors. Historical process-local object IDs are replaced by durable coordinate keys; fuzzy and unverified equivalences are never silently used.
 
