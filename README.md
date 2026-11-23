@@ -84,6 +84,46 @@ const cube = createCube(
 | `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
 | `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none` policy |
 | `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
+| `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors     |
+
+### Canonical dimension hierarchies
+
+`createHierarchy` accepts **explicit canonical member edges**, not inferred
+geographic or industry relations. One named hierarchy is a single-parent,
+acyclic forest within one dimension. Distinct classification systems use
+distinct hierarchy keys.
+
+```ts
+import { canonicalMember, createHierarchy } from "@vizhub/udc";
+
+const hierarchy = createHierarchy({
+  key: "un-m49",
+  dimensionId: "space",
+  revision: "source-snapshot:v1",
+  edition: "2026",
+  edges: [
+    {
+      child: canonicalMember("space", "india"),
+      parent: canonicalMember("space", "southern-asia"),
+      provenance: {
+        snapshot: { datasetId: "geography-2026", revision: "v1" },
+        sourceRow: 1,
+        mappingRevision: "approval:v1",
+      },
+    },
+  ],
+});
+
+hierarchy.parent("india")?.id; // "southern-asia"
+hierarchy.ancestors("india").map((member) => member.id);
+```
+
+Identical child-to-parent edges deduplicate while preserving each distinct
+source-row provenance. Cycles, self-parents, conflicting parents, cross-dimension
+identities and invalid revisions are rejected. Hosts must provide approved
+relationships and stable canonical IDs; UDC neither authorizes nor materializes
+member records. This module does **not** perform cube rollups or source-code
+translation. See [the hierarchy API](docs/api.md) and [semantics](docs/concepts.md).
 
 Inner joins return dense `CanonicalCube` values as before. Left/right/full joins return a distinct `SparseIntegratedCube`: `presence.left` and `presence.right` identify which source observed each coordinate. A source absent at a coordinate has **no measure property**; a present source reporting a null has a measure property whose `value` is `null`. Sparse results may be sliced, but cannot be implicitly aggregated or passed back as canonical input.
 
