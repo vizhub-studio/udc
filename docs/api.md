@@ -14,6 +14,7 @@ All documented functions and types are exported from `@vizhub/udc` and `src/inde
 | `canonicalizeCube`        | `(source, concordance) => CanonicalCube`                                                                                            |
 | `integrateCubes`          | `(a, b, {join:"inner"}) => CanonicalCube`; `left`/`right`/`full` return `SparseIntegratedCube`                                      |
 | `aggregateCube`           | `(canonicalOrAggregatedCube, retainDimensionIds) => AggregatedCube`; explicitly reduce coordinates using declared measure policies  |
+| `createHierarchy`         | `(definition: HierarchyDefinition) => Hierarchy`; deterministic, validated canonical parent/ancestor traversal without IO           |
 | `sliceCube`               | `(cube, member) => CanonicalCube or SparseIntegratedCube` (same stage as input)                                                     |
 | `projectDatasetCoverage`  | `(singleCanonicalCubeOrCoordinateDataset, dimensionIds) => ProjectedDatasetCoverage` (one dataset)                                  |
 | `countDatasetCoverage`    | `(projectedDatasets, outputDimensions) => DatasetCoverageSummary` (distinct dataset IDs at every observed coordinate)               |
@@ -21,7 +22,7 @@ All documented functions and types are exported from `@vizhub/udc` and `src/inde
 | `UdcError`                | Typed exception with `code: UdcErrorCode`                                                                                           |
 | `assertId`, `assertBound` | Low-level validators that throw `UdcError` on invalid identifiers or exhausted budgets                                              |
 
-Exported types include `CanonicalCoordinateDataset`, `DatasetCoverageCoordinate`, `ProjectedDatasetCoverage`, `DatasetCoverageObservation`, `DatasetCoverageSummary`, `JoinMode`, `OuterJoinMode`, `SparseIntegratedObservation`, `SparseIntegratedCube`, `DatasetSnapshot`, `Dimension`, `Codelist`, `CodedMemberRef`, `Member`, `MemberRef`, `Coordinate`, `CellKey`, `DimensionFieldMapping`, `AggregationOperator`, `MeasureDefinition`, `MeasureFieldMapping`, `SemanticSchema`, `MeasureProvenance`, `MeasureValue`, `Observation`, `CubeBase`, `SourceCube`, `CanonicalCube`, `AggregateAccumulator`, `AggregatedMeasureValue`, `AggregatedObservation`, `AggregatedCube`, `Relationship`, `CodeMapping`, `Resolution`, `Concordance`, `ConcordanceContext`, `IntegrationOptions`, `UdcErrorCode`.
+Exported types include `CanonicalCoordinateDataset`, `DatasetCoverageCoordinate`, `ProjectedDatasetCoverage`, `DatasetCoverageObservation`, `DatasetCoverageSummary`, `JoinMode`, `OuterJoinMode`, `SparseIntegratedObservation`, `SparseIntegratedCube`, `DatasetSnapshot`, `Dimension`, `Codelist`, `CodedMemberRef`, `Member`, `MemberRef`, `Coordinate`, `CellKey`, `DimensionFieldMapping`, `AggregationOperator`, `MeasureDefinition`, `MeasureFieldMapping`, `SemanticSchema`, `MeasureProvenance`, `MeasureValue`, `Observation`, `CubeBase`, `SourceCube`, `CanonicalCube`, `AggregateAccumulator`, `AggregatedMeasureValue`, `AggregatedObservation`, `AggregatedCube`, `Relationship`, `CodeMapping`, `Resolution`, `Concordance`, `ConcordanceContext`, `IntegrationOptions`, `UdcErrorCode`, `HierarchyDefinition`, `HierarchyEdgeInput`, `HierarchyEdge`, `HierarchyProvenance`, and `Hierarchy`.
 
 `SemanticSchema` maps input columns to explicit `DimensionFieldMapping` and `MeasureFieldMapping` definitions. `MeasureDefinition` carries an ID, name, mandatory canonical unit and mandatory `aggregation: "sum" | "count" | "average" | "none"` declaration; each field mapping carries a scale. UDC does not infer column semantics.
 
@@ -32,5 +33,21 @@ The `Resolution` result of a concordance has distinct `resolved`, `unresolved` a
 **Coverage contract:** `projectDatasetCoverage` accepts one `CanonicalCube` with exactly one source snapshot, or a `CanonicalCoordinateDataset` with canonical coordinates and no required measures. Its `retainDimensionIds` must be an explicitly selected subset of input axes. It returns distinct projected coordinates with `sourceCoordinateCount`, the selected dimension metadata, source snapshot identity, and source schema/concordance revisions. Empty dimensions are allowed: a nonempty dataset then contributes one global coordinate. Null-valued measures still count as _coordinate presence_, not a non-null-value claim.
 
 `countDatasetCoverage` accepts only projected datasets sharing the _same_ dimension IDs, and produces sorted `{ cellKey, coordinate, datasetCount, datasetIds }` observations plus the source snapshot list. Repeated visualization uses of the same dataset ID count once. Conflicting source or semantic revisions for the same dataset ID fail rather than silently combine. Dataset-only Country inputs cannot be promoted to Country × Year; no missing-axis fanout or Cartesian product is inferred. Limits include per-dataset 10,000 input coordinates, 1,000 projected inputs per summary, 100,000 contributions and 20,000 resulting coordinates. Overflow fails with `UdcError("LIMIT")`, never truncates.
+
+**Hierarchy contract:** The input specifies a `key`, `dimensionId`,
+`revision`, optional classification `edition`, and row-level directed
+`edges`. Each edge has canonical `child`/`parent` values and required
+`provenance: { snapshot, sourceRow, mappingRevision }`; optionally include
+both versioned `childSource` and `parentSource` coded references. The output
+exposes deterministic, deduplicated `edges` with all distinct evidence,
+`parent(memberOrId)` and `ancestors(memberOrId)`. Ancestors are nearest-first
+and exclude the member itself. One child may have only one parent in a given
+hierarchy revision, but multiple independent hierarchies may be constructed.
+Cycles, self-parenting and cross-dimension edges throw `UdcError`.
+Unrecognized members have no parent and no ancestors. Source row indices are
+one-based. Input edge counts are bounded by `UDC_LIMITS.rows`.
+The caller is responsible for resolving and approving canonical identities and
+pinning revisions; this is not a row-to-member resolver, provenance authority,
+hierarchy editor, or cube aggregation operation.
 
 **Compatibility:** The 2014 functions `getMember`, `getCell`, `createThesaurus`, `mergeCubes`, `Hierarchy`, and `mergeHierarchies` are **not** provided as drop-in aliases. See [migration notes](migration-from-2014.md). Public stable semantic contracts should be versioned before introducing additional joins, aggregation, loader APIs or manifest formats.

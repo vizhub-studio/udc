@@ -23,6 +23,7 @@ Core operations reject over-budget row/column counts rather than silently trunca
 - Dataset HTTP fetching, downloadable semantic manifests or an automatic browser loader
 - Joins with unequal dimensions, arbitrary dimension hierarchies, automatic numeric aggregation, or unit conversions
 - Semantic inference, codelist auto-approval, hierarchy editing or persistent semantic governance
+- Automatic hierarchy discovery, code-to-canonical resolution for hierarchy edges or hierarchy-aware cube rollups
 - Public/private source authorization, access tokens, tenant policy or cross-origin proxying
 - Sparse-join aggregation or implicit missing-measure fills (non-inner results require an explicit policy)
 - Automatic ingestion, durable coverage indexing, database pushdown, large files or Arrow/Parquet parsing

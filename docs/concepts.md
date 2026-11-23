@@ -12,6 +12,28 @@ A `SourceCube` stores `CodedMemberRef` values containing a dimension ID, code-li
 
 Coordinates use a stable, version-prefixed `udc-cell-v1:` key. They do not depend on process-local incrementing IDs or input member ordering.
 
+## Directed member hierarchies
+
+`createHierarchy` constructs a pure, in-memory graph from explicit canonical
+member edges. The graph is a single-parent, acyclic forest for one named
+hierarchy within a dimension. Thus `space`, `time`, and `industry` use the
+same semantics, and alternate administrative/statistical hierarchies remain
+separate by hierarchy key and revision. No canonical members are stored by UDC
+or inferred from unreviewed source labels.
+
+Each edge carries the source dataset snapshot, one-based source row, approved
+mapping revision, and optional versioned source codes for both endpoints.
+Duplicate edges are collapsed without discarding distinct provenance;
+conflicting parents and cycles are rejected. A root or unknown member has no
+parent; ancestors are traversed nearest-parent first.
+
+Classification `edition`, the graph `revision`, and individual mapping
+revisions are independent provenance concepts. The host must supply resolved,
+stable canonical identities for every endpoint and authorize source access
+before calling UDC. The hierarchy API only constructs and traverses a graph:
+it does not join datasets, load a table, aggregate cube measures or infer a
+transitive concordance.
+
 ## Reproducibility and provenance
 
 Each `MeasureValue` retains a `MeasureProvenance` record: source `DatasetSnapshot`, original row index, source-coded coordinate, schema revision, measure ID, unit, and (after canonicalization) concordance and mapping revisions.
