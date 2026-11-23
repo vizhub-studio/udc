@@ -4,7 +4,7 @@ A small, framework-independent TypeScript library for **semantic integration of 
 
 This is the modern continuation of [Curran Kelleher's original 2014 Universal Data Cube project](https://github.com/curran/udc/tree/gh-pages). The previous AMD/RequireJS version, tests, and annotated documentation are preserved on the historical `gh-pages` branch. The new implementation imports the typed in-memory core and pure golden tests developed in VizHub AI Studio, with provider-neutral snapshot identifiers.
 
-> **Release status:** The repository declares `@vizhub/udc@2.0.0`. The outer-join API described below is an **unreleased source change** until a subsequent npm publication. The package contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
+> **Release boundary:** Package versions published to npm are independent of this repository's unreleased source. This PR adds a coordinate coverage API that must be published in a later release before application consumers can install it. The package contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
 
 ## Watch the presentation
 
@@ -84,6 +84,8 @@ const cube = createCube(
 | `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
 | `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none` policy |
 | `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
+| `projectDatasetCoverage(source, dimensions)`                  | Project and deduplicate canonical coordinates for one dataset                   |
+| `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs       |
 | `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors     |
 
 ### Canonical dimension hierarchies
@@ -126,6 +128,8 @@ member records. This module does **not** perform cube rollups or source-code
 translation. See [the hierarchy API](docs/api.md) and [semantics](docs/concepts.md).
 
 Inner joins return dense `CanonicalCube` values as before. Left/right/full joins return a distinct `SparseIntegratedCube`: `presence.left` and `presence.right` identify which source observed each coordinate. A source absent at a coordinate has **no measure property**; a present source reporting a null has a measure property whose `value` is `null`. Sparse results may be sliced, but cannot be implicitly aggregated or passed back as canonical input.
+
+Coverage is separate from numeric integration. `projectDatasetCoverage` accepts a single-snapshot `CanonicalCube` or measure-less `CanonicalCoordinateDataset`, retains only selected canonical axes, and deduplicates coordinates within the dataset. `countDatasetCoverage` counts each dataset identity only once per coordinate, even when many source rows or visualization uses refer to the same dataset. It returns exact contributing dataset IDs for traceability. No Cartesian-product cells, inferred year coverage, implicit rollups, or numeric values are created.
 
 The implementation deliberately rejects unknown or non-equivalent identifiers, duplicate measure identities, incompatible grains, ambiguous mappings and over-budget operations. There is no guesswork or implicit aggregation.
 

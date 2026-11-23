@@ -6,24 +6,27 @@ The first standalone release ports the typed, fixture-tested **virtual cube core
 
 The imported `UDC_LIMITS` are deliberately conservative:
 
-| Budget                                 |  Value |
-| -------------------------------------- | -----: |
-| Cube inputs in current integration API |      2 |
-| Rows per source cube                   | 10,000 |
-| Columns per source                     |    100 |
-| Output observations                    | 10,000 |
+| Budget                                 |   Value |
+| -------------------------------------- | ------: |
+| Cube inputs in current integration API |       2 |
+| Rows per source cube                   |  10,000 |
+| Columns per source                     |     100 |
+| Output observations                    |  10,000 |
+| Projected datasets per coverage query  |   1,000 |
+| Projected coordinate contributions     | 100,000 |
+| Coverage summary coordinates           |  20,000 |
 
 Core operations reject over-budget row/column counts rather than silently truncating. File byte limits and CSV/TSV parsing belong to callers. These limits are not a streaming guarantee or protection from all potentially expensive workloads.
 
 ## Not implemented
 
 - Dataset HTTP fetching, downloadable semantic manifests or an automatic browser loader
-- Joins with unequal dimensions, coordinate-only projections, automatic aggregation, or unit conversions
+- Joins with unequal dimensions, arbitrary dimension hierarchies, automatic numeric aggregation, or unit conversions
 - Semantic inference, codelist auto-approval, hierarchy editing or persistent semantic governance
 - Automatic hierarchy discovery, code-to-canonical resolution for hierarchy edges or hierarchy-aware cube rollups
 - Public/private source authorization, access tokens, tenant policy or cross-origin proxying
 - Sparse-join aggregation or implicit missing-measure fills (non-inner results require an explicit policy)
-- Multi-cube execution planning, database pushdown, large files or Arrow/Parquet parsing
+- Automatic ingestion, durable coverage indexing, database pushdown, large files or Arrow/Parquet parsing
 - Persisted materialized cubes or remote registry/database APIs
 
 ## Security boundaries

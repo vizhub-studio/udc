@@ -120,6 +120,56 @@ export interface SparseIntegratedCube extends Omit<
   join: "left" | "right" | "full";
   observations: readonly SparseIntegratedObservation[];
 }
+/**
+ * A single dataset of already-canonical coordinates. Unlike SourceCube,
+ * this may contain no measures and may repeat coordinates (e.g. source rows
+ * that differ on an axis not retained by the coverage query).
+ * Callers must use explicitly reviewed, exact canonical mappings.
+ */
+export interface CanonicalCoordinateDataset {
+  stage: "coordinate-dataset";
+  snapshot: DatasetSnapshot;
+  dimensions: readonly Dimension[];
+  coordinates: readonly Coordinate<Member>[];
+  schemaRevisions?: readonly string[];
+  concordanceRevisions?: readonly string[];
+}
+
+/** One unique projected coordinate from a single dataset. */
+export interface DatasetCoverageCoordinate {
+  coordinate: Coordinate<Member>;
+  cellKey: CellKey;
+  /** Number of source observations collapsing to this coordinate. */
+  sourceCoordinateCount: number;
+}
+
+/** Coordinate presence is neither a measure nor a numeric aggregation. */
+export interface ProjectedDatasetCoverage {
+  stage: "dataset-coverage";
+  snapshot: DatasetSnapshot;
+  dimensions: readonly Dimension[];
+  coordinates: readonly DatasetCoverageCoordinate[];
+  schemaRevisions: readonly string[];
+  concordanceRevisions: readonly string[];
+}
+
+/** A cell in the union of selected, authorized dataset coordinates. */
+export interface DatasetCoverageObservation {
+  coordinate: Coordinate<Member>;
+  cellKey: CellKey;
+  datasetCount: number;
+  /** Sorted distinct dataset identities, never repeated source rows. */
+  datasetIds: readonly string[];
+}
+
+/** Not a CanonicalCube; no numeric value or synthetic observation is created. */
+export interface DatasetCoverageSummary {
+  stage: "coverage-summary";
+  dimensions: readonly Dimension[];
+  observations: readonly DatasetCoverageObservation[];
+  snapshots: readonly DatasetSnapshot[];
+}
+
 /** Reusable sufficient statistics for compositional roll-ups. */
 export interface AggregateAccumulator {
   sum: number;

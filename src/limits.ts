@@ -3,6 +3,9 @@ export const UDC_LIMITS = {
   rows: 10_000,
   columns: 100,
   outputObservations: 10_000,
+  coverageDatasets: 1_000,
+  coverageContributions: 100_000,
+  coverageOutputCoordinates: 20_000,
 } as const;
 export type UdcErrorCode =
   | "INVALID"
