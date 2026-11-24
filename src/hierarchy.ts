@@ -128,7 +128,9 @@ function evidenceKey(value: HierarchyProvenance): string {
  * resolved to canonical members by the caller; this function never guesses
  * identity or performs IO.
  */
-export function createHierarchy(definition: HierarchyDefinition): NavigableHierarchy {
+export function createHierarchy(
+  definition: HierarchyDefinition,
+): NavigableHierarchy {
   if (!definition || typeof definition !== "object")
     throw new UdcError("INVALID", "Missing hierarchy definition");
   assertId(definition.key, "hierarchy key");

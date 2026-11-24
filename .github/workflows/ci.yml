@@ -15,5 +15,27 @@ jobs:
         with:
           node-version: "22"
       - run: npm install
-      - run: npm run check
-      - run: npm run example
+        id: install
+      - name: Formatting
+        id: format
+        run: npm run format:check
+      - name: ESLint
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint
+      - name: Type checking
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+      - name: Unit tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+      - name: Package tests
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run test:package
+      - name: Example
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run example
+      - name: Show formatting diff
+        if: ${{ !cancelled() && steps.format.outcome == 'failure' }}
+        run: |
+          npm run format
+          git diff --no-ext-diff
