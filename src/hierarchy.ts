@@ -49,6 +49,13 @@ export interface Hierarchy {
   ancestors(member: Member | string): readonly Member[];
 }
 
+/** Navigation added by createHierarchy; legacy structural Hierarchy values remain valid. */
+export interface NavigableHierarchy extends Hierarchy {
+  children(member: Member | string): readonly Member[];
+  /** Breadth-first, stable sibling order; excludes the input member. */
+  descendants(member: Member | string): readonly Member[];
+}
+
 const stable = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 function canonical(member: Member, dimensionId: string): Member {
@@ -121,7 +128,7 @@ function evidenceKey(value: HierarchyProvenance): string {
  * resolved to canonical members by the caller; this function never guesses
  * identity or performs IO.
  */
-export function createHierarchy(definition: HierarchyDefinition): Hierarchy {
+export function createHierarchy(definition: HierarchyDefinition): NavigableHierarchy {
   if (!definition || typeof definition !== "object")
     throw new UdcError("INVALID", "Missing hierarchy definition");
   assertId(definition.key, "hierarchy key");
@@ -200,6 +207,12 @@ export function createHierarchy(definition: HierarchyDefinition): Hierarchy {
         .map(([, value]) => value),
     }));
 
+  const childrenByParent = new Map<string, Member[]>();
+  for (const edge of edges) {
+    const children = childrenByParent.get(edge.parent.id) ?? [];
+    children.push(edge.child);
+    childrenByParent.set(edge.parent.id, children);
+  }
   const memberId = (member: Member | string): string => {
     if (typeof member === "string") {
       assertId(member, "hierarchy member");
@@ -215,6 +228,19 @@ export function createHierarchy(definition: HierarchyDefinition): Hierarchy {
     edges,
     parent(member) {
       return parents.get(memberId(member));
+    },
+    children(member) {
+      return [...(childrenByParent.get(memberId(member)) ?? [])];
+    },
+    descendants(member) {
+      const result = [...(childrenByParent.get(memberId(member)) ?? [])];
+      for (let i = 0; i < result.length; i++) {
+        for (const child of childrenByParent.get(result[i].id) ?? []) {
+          result.push(child);
+          assertBound(result.length, UDC_LIMITS.rows, "hierarchy descendants");
+        }
+      }
+      return result;
     },
     ancestors(member) {
       const result: Member[] = [];
