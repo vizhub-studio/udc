@@ -94,6 +94,11 @@ const cube = createCube(
 - `rollupCube(cube, hierarchy, targetMembers)` replaces members on one axis with their selected ancestors and aggregates using the existing measure policies. Targets must be disjoint and cover all observed members. Sparse inputs and mixed ancestor/descendant grains are rejected.
 - `calculateMeasure(cube, definition)` evaluates a bounded arithmetic expression at each coordinate. The result is a distinct, terminal calculated stage with operand provenance. Calculate ratios after roll-up, not before.
 
+- `drilldownCube(fineCube, hierarchy, parentMemberId)` expands a parent into observed immediate-child totals from finer-grained data.
+- `filterCube(cube, predicate)` applies bounded numeric and boolean predicates, distinguishing null from absent measures.
+- `rankCube(cube, options)` returns non-aggregatable ranking metadata with optional dimension partitions.
+- `topNCube(cube, options)` selects top or bottom observations per partition with explicit cutoff tie semantics. Filtering, dice, ranking and top-N also support calculated cubes.
+
 See [OLAP examples and contracts](docs/olap.md).
 
 ### Canonical dimension hierarchies
@@ -132,8 +137,8 @@ Identical child-to-parent edges deduplicate while preserving each distinct
 source-row provenance. Cycles, self-parents, conflicting parents, cross-dimension
 identities and invalid revisions are rejected. Hosts must provide approved
 relationships and stable canonical IDs; UDC neither authorizes nor materializes
-member records. This module does **not** perform cube rollups or source-code
-translation. See [the hierarchy API](docs/api.md) and [semantics](docs/concepts.md).
+member records. The hierarchy module itself does **not** perform cube rollups or source-code
+translation; use the separate OLAP operators for cube queries. See [the hierarchy API](docs/api.md) and [semantics](docs/concepts.md).
 
 Inner joins return dense `CanonicalCube` values as before. Left/right/full joins return a distinct `SparseIntegratedCube`: `presence.left` and `presence.right` identify which source observed each coordinate. A source absent at a coordinate has **no measure property**; a present source reporting a null has a measure property whose `value` is `null`. Sparse results may be sliced, but cannot be implicitly aggregated or passed back as canonical input.
 
