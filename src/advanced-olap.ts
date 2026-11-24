@@ -73,11 +73,12 @@ export function drilldownCube(
     assertBound(descendants.size, UDC_LIMITS.rows, "hierarchy descendants");
     for (const child of byParent.get(id) ?? []) pending.push(child.id);
   }
+  const ancestors = new Set(hierarchy.ancestors(parentMemberId).map((member) => member.id));
   for (const observation of cube.observations) {
     const member = observation.coordinate.members.find((m) => m.dimensionId === hierarchy.dimensionId);
     if (!member || !known.has(member.id))
       throw new UdcError("UNRESOLVED", "Observation missing from hierarchy");
-    if (member.id === parentMemberId || hierarchy.ancestors(parentMemberId).some((ancestor) => ancestor.id === member.id))
+    if (member.id === parentMemberId || ancestors.has(member.id))
       throw new UdcError("INCOMPATIBLE", "Parent or coarser observation cannot be drilled down");
   }
   const selected = diceCube(cube, [{ dimensionId: hierarchy.dimensionId, memberIds: [...descendants] }]);
