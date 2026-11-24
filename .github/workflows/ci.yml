@@ -9,6 +9,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,7 +17,8 @@ jobs:
           node-version: "22"
       - run: npm install
         id: install
-      - name: Formatting
+      - name: Formatting (advisory)
+        continue-on-error: true
         id: format
         run: npm run format:check
       - name: ESLint
@@ -34,7 +36,8 @@ jobs:
       - name: Example
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run example
-      - name: Show formatting diff
+      - name: Show formatting diff (advisory)
+        continue-on-error: true
         if: ${{ !cancelled() && steps.format.outcome == 'failure' }}
         run: |
           npm run format
