@@ -19,7 +19,12 @@ export interface DiceSelection {
 }
 
 function queryCube(cube: QueryCube | CalculatedCube): void {
-  if (!cube || !["canonical", "aggregated", "sparse-integrated", "calculated"].includes(cube.stage))
+  if (
+    !cube ||
+    !["canonical", "aggregated", "sparse-integrated", "calculated"].includes(
+      cube.stage,
+    )
+  )
     throw new UdcError("INCOMPATIBLE", "Expected a canonical query cube");
   assertBound(cube.observations.length, UDC_LIMITS.rows, "input observations");
   assertBound(cube.measures.length, UDC_LIMITS.columns, "input measures");
@@ -69,14 +74,19 @@ export function rollupCube(
 ): AggregatedCube {
   queryCube(cube);
   if (cube.stage !== "canonical" && cube.stage !== "aggregated")
-    throw new UdcError("INCOMPATIBLE", "Sparse roll-up requires a missingness policy");
+    throw new UdcError(
+      "INCOMPATIBLE",
+      "Sparse roll-up requires a missingness policy",
+    );
   if (!cube.dimensions.some((d) => d.id === hierarchy.dimensionId))
     throw new UdcError("INCOMPATIBLE", "Hierarchy dimension not in cube");
   if (!Array.isArray(targetMembers) || targetMembers.length === 0)
     throw new UdcError("INVALID", "Expected explicit roll-up targets");
   assertBound(targetMembers.length, UDC_LIMITS.rows, "roll-up targets");
   const edges = new Map(hierarchy.edges.map((edge) => [edge.child.id, edge]));
-  const known = new Set(hierarchy.edges.flatMap((edge) => [edge.child.id, edge.parent.id]));
+  const known = new Set(
+    hierarchy.edges.flatMap((edge) => [edge.child.id, edge.parent.id]),
+  );
   const targets = new Set<string>();
   for (const target of targetMembers) {
     assertId(target, "roll-up target");
@@ -111,8 +121,7 @@ export function rollupCube(
     const member = observation.coordinate.members.find(
       (m) => m.dimensionId === hierarchy.dimensionId,
     );
-    if (!member)
-      throw new UdcError("INCOMPATIBLE", "Missing hierarchy axis");
+    if (!member) throw new UdcError("INCOMPATIBLE", "Missing hierarchy axis");
     observed.add(member.id);
   }
   const mapped = new Map<string, Member>();
@@ -139,9 +148,12 @@ export function rollupCube(
     cube,
     cube.dimensions.map((dimension) => dimension.id),
     (member) =>
-      member.dimensionId === hierarchy.dimensionId ? mapped.get(member.id)! : member,
+      member.dimensionId === hierarchy.dimensionId
+        ? mapped.get(member.id)!
+        : member,
   );
-  const prior = cube.stage === "aggregated" ? cube.hierarchyRollups ?? [] : [];
+  const prior =
+    cube.stage === "aggregated" ? (cube.hierarchyRollups ?? []) : [];
   assertBound(prior.length + 1, UDC_LIMITS.columns, "roll-up history");
   return {
     ...result,
@@ -184,11 +196,21 @@ export interface CalculatedMeasureValue {
 export interface CalculatedObservation {
   coordinate: CanonicalCube["observations"][number]["coordinate"];
   cellKey: string;
-  values: Readonly<Partial<Record<string, MeasureValue | AggregatedMeasureValue | CalculatedMeasureValue>>>;
+  values: Readonly<
+    Partial<
+      Record<
+        string,
+        MeasureValue | AggregatedMeasureValue | CalculatedMeasureValue
+      >
+    >
+  >;
   presence?: { left: boolean; right: boolean };
 }
 /** Terminal calculation stage: never silently aggregate a derived ratio. */
-export interface CalculatedCube extends Omit<AggregatedCube, "stage" | "observations"> {
+export interface CalculatedCube extends Omit<
+  AggregatedCube,
+  "stage" | "observations"
+> {
   stage: "calculated";
   inputStage: QueryCube["stage"];
   definition: CalculatedMeasureDefinition;
@@ -202,7 +224,10 @@ export function calculateMeasure(
 ): CalculatedCube {
   queryCube(cube);
   if (!["canonical", "aggregated", "sparse-integrated"].includes(cube.stage))
-    throw new UdcError("INCOMPATIBLE", "Calculation requires a pre-calculated input");
+    throw new UdcError(
+      "INCOMPATIBLE",
+      "Calculation requires a pre-calculated input",
+    );
   assertId(definition.id, "calculated measure");
   assertId(definition.unit, "calculated unit");
   if (typeof definition.name !== "string" || !definition.name.trim())
@@ -226,7 +251,10 @@ export function calculateMeasure(
       if (!measures.has(expr.measureId))
         throw new UdcError("UNRESOLVED", "Unknown expression measure");
       references.add(expr.measureId);
-    } else if (expr.kind === "binary" && ["+", "-", "*", "/"].includes(expr.operator)) {
+    } else if (
+      expr.kind === "binary" &&
+      ["+", "-", "*", "/"].includes(expr.operator)
+    ) {
       validate(expr.left, depth + 1);
       validate(expr.right, depth + 1);
     } else {
@@ -241,50 +269,64 @@ export function calculateMeasure(
     unit: definition.unit,
     aggregation: "none",
   };
-  const observations: CalculatedObservation[] = cube.observations.map((observation) => {
-    const values = observation.values;
-    const inputs: { measureId: string; contributors: readonly MeasureProvenance[] }[] = [];
-    let absent = false;
-    for (const id of ids) {
-      const value = Object.hasOwn(values, id) ? values[id] : undefined;
-      if (!value) {
-        if (cube.stage !== "sparse-integrated")
-          throw new UdcError("INCOMPATIBLE", "Missing input measure");
-        absent = true;
-      } else {
-        inputs.push({
-          measureId: id,
-          contributors: "contributors" in value ? value.contributors : [value.provenance],
-        });
+  const observations: CalculatedObservation[] = cube.observations.map(
+    (observation) => {
+      const values = observation.values;
+      const inputs: {
+        measureId: string;
+        contributors: readonly MeasureProvenance[];
+      }[] = [];
+      let absent = false;
+      for (const id of ids) {
+        const value = Object.hasOwn(values, id) ? values[id] : undefined;
+        if (!value) {
+          if (cube.stage !== "sparse-integrated")
+            throw new UdcError("INCOMPATIBLE", "Missing input measure");
+          absent = true;
+        } else {
+          inputs.push({
+            measureId: id,
+            contributors:
+              "contributors" in value ? value.contributors : [value.provenance],
+          });
+        }
       }
-    }
-    if (absent) return { ...observation };
-    function evaluate(expr: MeasureExpression): number | null {
-      if (expr.kind === "constant") return expr.value;
-      if (expr.kind === "measure") return values[expr.measureId]!.value;
-      const a = evaluate(expr.left);
-      const b = evaluate(expr.right);
-      if (a === null || b === null || (expr.operator === "/" && b === 0)) return null;
-      const result = expr.operator === "+" ? a + b
-        : expr.operator === "-" ? a - b
-        : expr.operator === "*" ? a * b : a / b;
-      if (!Number.isFinite(result))
-        throw new UdcError("LIMIT", "Calculated value overflow");
-      return result;
-    }
-    return {
-      ...observation,
-      values: {
-        ...values,
-        [definition.id]: { value: evaluate(definition.expression), inputs },
-      },
-    };
-  });
+      if (absent) return { ...observation };
+      function evaluate(expr: MeasureExpression): number | null {
+        if (expr.kind === "constant") return expr.value;
+        if (expr.kind === "measure") return values[expr.measureId]!.value;
+        const a = evaluate(expr.left);
+        const b = evaluate(expr.right);
+        if (a === null || b === null || (expr.operator === "/" && b === 0))
+          return null;
+        const result =
+          expr.operator === "+"
+            ? a + b
+            : expr.operator === "-"
+              ? a - b
+              : expr.operator === "*"
+                ? a * b
+                : a / b;
+        if (!Number.isFinite(result))
+          throw new UdcError("LIMIT", "Calculated value overflow");
+        return result;
+      }
+      return {
+        ...observation,
+        values: {
+          ...values,
+          [definition.id]: { value: evaluate(definition.expression), inputs },
+        },
+      };
+    },
+  );
   return {
     ...cube,
     stage: "calculated",
     inputStage: cube.stage,
-    definition: JSON.parse(JSON.stringify(definition)) as CalculatedMeasureDefinition,
+    definition: JSON.parse(
+      JSON.stringify(definition),
+    ) as CalculatedMeasureDefinition,
     measures: [...cube.measures, measure],
     observations,
   };
