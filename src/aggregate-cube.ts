@@ -38,6 +38,15 @@ export function aggregateCube(
   cube: InputCube,
   retainDimensionIds: readonly string[],
 ): AggregatedCube {
+  return aggregateByCoordinate(cube, retainDimensionIds);
+}
+
+/** Internal shared reducer; the caller must validate any coordinate mapping. */
+export function aggregateByCoordinate(
+  cube: InputCube,
+  retainDimensionIds: readonly string[],
+  mapMember: (member: Member) => Member = (member) => member,
+): AggregatedCube {
   if (!cube || (cube.stage !== "canonical" && cube.stage !== "aggregated"))
     throw new UdcError("INCOMPATIBLE", "Expected canonical or aggregated cube");
   if (!Array.isArray(retainDimensionIds))
@@ -111,9 +120,9 @@ export function aggregateCube(
       throw new UdcError("INCOMPATIBLE", "Input measure set mismatch");
 
     const coordinate: Coordinate<Member> = {
-      members: observation.coordinate.members.filter((member) =>
-        retained.has(member.dimensionId),
-      ),
+      members: observation.coordinate.members
+        .filter((member) => retained.has(member.dimensionId))
+        .map(mapMember),
     };
     const cellKey = getCellKey(coordinate);
     let group = groups.get(cellKey);
@@ -220,5 +229,8 @@ export function aggregateCube(
     snapshots: cube.snapshots,
     schemaRevisions: cube.schemaRevisions,
     concordanceRevisions: cube.concordanceRevisions,
+    ...(cube.stage === "aggregated" && cube.hierarchyRollups
+      ? { hierarchyRollups: cube.hierarchyRollups }
+      : {}),
   };
 }

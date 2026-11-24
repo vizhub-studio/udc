@@ -88,6 +88,14 @@ const cube = createCube(
 | `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs       |
 | `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors     |
 
+### OLAP query operators
+
+- `diceCube(cube, selections)` filters by canonical member sets (OR within an axis, AND across axes), retaining dimensions and provenance. Empty selections match all; an empty member set matches none.
+- `rollupCube(cube, hierarchy, targetMembers)` replaces members on one axis with their selected ancestors and aggregates using the existing measure policies. Targets must be disjoint and cover all observed members. Sparse inputs and mixed ancestor/descendant grains are rejected.
+- `calculateMeasure(cube, definition)` evaluates a bounded arithmetic expression at each coordinate. The result is a distinct, terminal calculated stage with operand provenance. Calculate ratios after roll-up, not before.
+
+See [OLAP examples and contracts](docs/olap.md).
+
 ### Canonical dimension hierarchies
 
 `createHierarchy` accepts **explicit canonical member edges**, not inferred

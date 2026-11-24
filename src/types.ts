@@ -175,6 +175,14 @@ export interface AggregateAccumulator {
   sum: number;
   count: number;
 }
+/** Versioned hierarchy evidence actually used by one roll-up. */
+export interface HierarchyRollupEvidence {
+  key: string;
+  dimensionId: string;
+  revision: string;
+  edition?: string;
+  edges: readonly import("./hierarchy").HierarchyEdge[];
+}
 /** Aggregated observations never masquerade as single-source observations. */
 export interface AggregatedMeasureValue {
   value: number | null;
@@ -188,6 +196,7 @@ export interface AggregatedObservation {
 }
 export interface AggregatedCube {
   stage: "aggregated";
+  hierarchyRollups?: readonly HierarchyRollupEvidence[];
   dimensions: readonly Dimension[];
   measures: readonly MeasureDefinition[];
   observations: readonly AggregatedObservation[];

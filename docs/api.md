@@ -51,3 +51,7 @@ pinning revisions; this is not a row-to-member resolver, provenance authority,
 hierarchy editor, or cube aggregation operation.
 
 **Compatibility:** The 2014 functions `getMember`, `getCell`, `createThesaurus`, `mergeCubes`, `Hierarchy`, and `mergeHierarchies` are **not** provided as drop-in aliases. See [migration notes](migration-from-2014.md). Public stable semantic contracts should be versioned before introducing additional joins, aggregation, loader APIs or manifest formats.
+
+## OLAP query operations
+
+The public exports `diceCube`, `rollupCube`, `calculateMeasure`, `DiceSelection`, `HierarchyRollupEvidence`, `MeasureExpression`, `CalculatedMeasureDefinition`, `CalculatedMeasureValue`, `CalculatedObservation`, and `CalculatedCube` are documented in [OLAP operations](olap.md). The calculated stage is deliberately distinct from canonical and aggregated stages.
