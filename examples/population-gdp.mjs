@@ -128,10 +128,15 @@ const eligible = filterCube(ratios, {
 });
 const options = { measureId: "gdp-per-capita", direction: "desc" };
 const top = topNCube(eligible, { ...options, n: 10, ties: "include" });
-const ranks = new Map(rankCube(eligible, options).map((row) => [row.cellKey, row.rank]));
+const ranks = new Map(
+  rankCube(eligible, options).map((row) => [row.cellKey, row.rank]),
+);
 console.log("Top observed GDP per capita in 1960 (population >= 1 million)");
-console.log(top.observations.map((row) => ({
-  country: row.coordinate.members.find((m) => m.dimensionId === "country")?.id,
-  rank: ranks.get(row.cellKey),
-  gdpPerCapita: row.values["gdp-per-capita"].value,
-})));
+console.log(
+  top.observations.map((row) => ({
+    country: row.coordinate.members.find((m) => m.dimensionId === "country")
+      ?.id,
+    rank: ranks.get(row.cellKey),
+    gdpPerCapita: row.values["gdp-per-capita"].value,
+  })),
+);
