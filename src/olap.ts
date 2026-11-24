@@ -18,15 +18,15 @@ export interface DiceSelection {
   memberIds: readonly string[];
 }
 
-function queryCube(cube: QueryCube): void {
-  if (!cube || !["canonical", "aggregated", "sparse-integrated"].includes(cube.stage))
+function queryCube(cube: QueryCube | CalculatedCube): void {
+  if (!cube || !["canonical", "aggregated", "sparse-integrated", "calculated"].includes(cube.stage))
     throw new UdcError("INCOMPATIBLE", "Expected a canonical query cube");
   assertBound(cube.observations.length, UDC_LIMITS.rows, "input observations");
   assertBound(cube.measures.length, UDC_LIMITS.columns, "input measures");
 }
 
 /** OR within each selection, AND across dimensions; preserve the input grain. */
-export function diceCube<T extends QueryCube>(
+export function diceCube<T extends QueryCube | CalculatedCube>(
   cube: T,
   selections: readonly DiceSelection[],
 ): T {
@@ -201,6 +201,8 @@ export function calculateMeasure(
   definition: CalculatedMeasureDefinition,
 ): CalculatedCube {
   queryCube(cube);
+  if (!["canonical", "aggregated", "sparse-integrated"].includes(cube.stage))
+    throw new UdcError("INCOMPATIBLE", "Calculation requires a pre-calculated input");
   assertId(definition.id, "calculated measure");
   assertId(definition.unit, "calculated unit");
   if (typeof definition.name !== "string" || !definition.name.trim())
