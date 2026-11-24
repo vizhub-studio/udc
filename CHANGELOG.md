@@ -1,5 +1,14 @@
 # Change log
 
+## Unreleased — advanced OLAP queries
+
+- Add provenance-preserving drill-down from explicitly supplied finer-grained data and deterministic hierarchy children/descendants navigation.
+- Add bounded measure predicates with three-valued numeric logic and separate null and absence checks.
+- Add partitioned ranking metadata (ordinal, competition, dense) and top/bottom-N with deterministic cutoff ties.
+- Allow dice, filtering and ranking on calculated results while retaining the aggregation barrier.
+- Include extensive regression, seeded permutation, resource-limit and end-to-end GDP-per-capita tests.
+- No production dependencies, application integration or package publication.
+
 ## Unreleased — coordinate projection and dataset coverage
 
 - Add `projectDatasetCoverage` to deduplicate the projection of a single canonical dataset's observed coordinates, independently of measures or aggregation policies.

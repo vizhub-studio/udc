@@ -11,3 +11,4 @@ export { aggregateCube } from "./aggregate-cube";
 export * from "./coverage";
 export * from "./hierarchy";
 export * from "./olap";
+export * from "./advanced-olap";
