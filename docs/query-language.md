@@ -63,12 +63,45 @@ cube. Each source must have one dataset snapshot with an immutable revision.
 | join               | inner (default), full, left or right                                                      |
 | joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source    |
 | topN               | Existing TopNOptions, partitioned on retained axes                                        |
+| orderBy            | Ordered dimension or measure keys from the requested output                               |
+| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                  |
 
 All identifiers are canonical semantic IDs. Dimension ranges are not inferred
 from IDs; enumerate canonical members explicitly. Numeric comparisons, ranges,
 Boolean predicates and arithmetic use the existing structured operator types
 (see [OLAP contracts](olap.md)). A count roll-up is requested as
 `measure-id:count`, exactly as the existing reducer names its output.
+
+## Ordering and limits
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population", "gdp-usd"],
+  "orderBy": [
+    { "kind": "dimension", "dimensionId": "year", "direction": "asc" },
+    { "kind": "measure", "measureId": "gdp-usd", "direction": "desc" }
+  ],
+  "limit": 100
+}
+```
+
+Earlier keys take precedence. Dimensions compare canonical IDs lexically,
+not display labels or inferred numeric or chronological values. Measures
+compare numeric values; explicit nulls sort after numbers, and absent values
+sort after nulls, in either direction. Equal keys fall back to ascending
+canonical cell keys. Ordering keys must be unique selected output fields
+(including a calculated measure or explicit derived count identity).
+An omitted or empty ordering preserves the original default ordering,
+including the existing top-N ordering. Explicit ordering is applied after
+top-N and does not change which observations top-N selects.
+
+The optional limit applies globally after ordering. Zero returns no observations
+but preserves result metadata. A limit greater than the result size returns
+all observations; values above the existing output bound are rejected.
+Limits do not relax source or intermediate computational resource budgets.
+They are not pagination or a replacement for partitioned top-N.
 
 ## Planning and execution
 
@@ -84,8 +117,9 @@ Boolean predicates and arithmetic use the existing structured operator types
    of complete coverage. Explicit left/right/full joins retain sparse absence
    and cannot roll up or aggregate.
 4. Calculate the derived measure at final grain, apply the measure predicate,
-   select top/bottom N, and project the requested output. Missing and null
-   values retain existing operator semantics. Ranking ties use canonical keys.
+   select top/bottom N, apply explicit ordering, apply the global limit, and
+   project the requested output. Missing and null values retain existing operator
+   semantics. Ranking ties use canonical keys.
 5. Return a terminal QueryResult with requested dimensions and measures, cell
    keys, values, provenance, snapshots, hierarchy evidence and sparse flags.
    Hidden operands are excluded from output columns but remain in calculation
@@ -104,7 +138,7 @@ The existing UDC limits apply (including two selected source cubes, 10,000
 observations, bounded expression/predicate trees). One calculated measure per
 query; no chained calculations or arbitrary code. No implicit aggregation of
 sparse results, cross-grain joins, inferred source preferences, drill-down query
-syntax, independent rank metadata, arbitrary sorting, dataset coverage queries,
+syntax, independent rank metadata, sorting by hidden fields, dataset coverage queries,
 physical loading, authentication, HTTP/MCP endpoints, or application UI.
 Existing lower-level operators remain public for these workflows. No new
 production dependencies. This source change does not publish an npm version.

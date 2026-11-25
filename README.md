@@ -229,6 +229,26 @@ Derived measures are evaluated after aggregation, so a regional ratio is the
 ratio of totals, not an unweighted average of country ratios. Null operands
 or division by zero yield null; absent operands in sparse data remain absent.
 
+### 8. Order and limit results
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population", "gdp-usd"],
+  "orderBy": [
+    { "kind": "dimension", "dimensionId": "year", "direction": "asc" },
+    { "kind": "measure", "measureId": "gdp-usd", "direction": "desc" }
+  ],
+  "limit": 100
+}
+```
+
+Ordering uses selected output fields, canonical member IDs for dimensions,
+and numeric values for measures. Null and absent measures sort last, with
+canonical cell keys breaking ties. The global limit applies after top-N and
+ordering, without relaxing computational resource limits.
+
 ### How queries work
 
 ```mermaid
@@ -242,14 +262,14 @@ flowchart TD
 ```
 
 Execution applies dimension filters, integration, hierarchy roll-ups,
-aggregation, calculations, measure filters, top-N and output projection in
+aggregation, calculations, measure filters, top-N, ordering, limits and output projection in
 that order, skipping unnecessary steps. Ambiguous source providers,
 incompatible grains, invalid expressions and stale plans fail with typed errors
 rather than being guessed or silently corrected.
 
 The v1 query API supports at most two selected source cubes and one calculated
 measure. It does not load data, authorize access, convert units, infer hierarchy
-relationships or support arbitrary sorting and chained calculations. The host
+relationships or support sorting by hidden fields and chained calculations. The host
 must supply authorized, immutable inputs and compatible units. Drill-down and
 coverage queries remain available through the lower-level operators.
 

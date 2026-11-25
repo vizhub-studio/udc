@@ -129,6 +129,15 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
       fail("INCOMPATIBLE", "Ranking partition must be retained");
   }
 
+  for (const order of query.orderBy ?? []) {
+    const selected =
+      order.kind === "dimension"
+        ? query.dimensions.includes(order.dimensionId)
+        : query.measures.includes(order.measureId);
+    if (!selected)
+      fail("INCOMPATIBLE", "Ordering field must be selected in the output");
+  }
+
   const calculation = query.calculatedMeasures?.[0];
   const refs = new Set(query.measures);
   if (query.measureFilter) predicateRefs(query.measureFilter, refs);
@@ -238,6 +247,8 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   if (calculation) steps.push("calculate");
   if (query.measureFilter) steps.push("filter-measures");
   if (query.topN) steps.push("top-n");
+  if (query.orderBy?.length) steps.push("order");
+  if (query.limit !== undefined) steps.push("limit");
   steps.push("project");
   // Detach from mutable caller objects; plans contain no executable functions.
   return JSON.parse(
