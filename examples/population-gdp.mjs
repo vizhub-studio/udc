@@ -102,7 +102,10 @@ const query = (spec) => {
   validateQuery(spec);
   const plan = planQuery(spec, catalog);
   const selected = cubes.filter((cube) =>
-    plan.sources.some((source) => source.source.snapshot.datasetId === cube.snapshots[0].datasetId),
+    plan.sources.some(
+      (source) =>
+        source.source.snapshot.datasetId === cube.snapshots[0].datasetId,
+    ),
   );
   return executeQuery(plan, { cubes: selected });
 };
@@ -130,17 +133,19 @@ const top = query({
   dimensions: queryDimensions,
   measures: ["gdp-per-capita"],
   filters,
-  calculatedMeasures: [{
-    id: "gdp-per-capita",
-    name: "GDP per capita",
-    unit: "USD/person",
-    expression: {
-      kind: "binary",
-      operator: "/",
-      left: { kind: "measure", measureId: "gdp-usd" },
-      right: { kind: "measure", measureId: "population" },
+  calculatedMeasures: [
+    {
+      id: "gdp-per-capita",
+      name: "GDP per capita",
+      unit: "USD/person",
+      expression: {
+        kind: "binary",
+        operator: "/",
+        left: { kind: "measure", measureId: "gdp-usd" },
+        right: { kind: "measure", measureId: "population" },
+      },
     },
-  }],
+  ],
   measureFilter: {
     kind: "compare",
     measureId: "population",

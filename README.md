@@ -140,10 +140,7 @@ Supply both canonical sources in the catalog:
 
 ```ts
 const catalog = {
-  sources: [
-    describeQuerySource(populationCube),
-    describeQuerySource(gdpCube),
-  ],
+  sources: [describeQuerySource(populationCube), describeQuerySource(gdpCube)],
 };
 const plan = planQuery(query, catalog);
 const result = executeQuery(plan, { cubes: [populationCube, gdpCube] });

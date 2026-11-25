@@ -230,17 +230,33 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
   ): CanonicalCube[] {
     return [
       canonicalizeCube(
-        createCube(p, popSchema, p === popRows ? un : {
-          datasetId: un.datasetId,
-          revision: "fixture:synthetic-" + createHash("sha256").update(JSON.stringify(p)).digest("hex"),
-        }),
+        createCube(
+          p,
+          popSchema,
+          p === popRows
+            ? un
+            : {
+                datasetId: un.datasetId,
+                revision:
+                  "fixture:synthetic-" +
+                  createHash("sha256").update(JSON.stringify(p)).digest("hex"),
+              },
+        ),
         concordance,
       ),
       canonicalizeCube(
-        createCube(g, gdpSchema, g === gdpRows ? wb : {
-          datasetId: wb.datasetId,
-          revision: "fixture:synthetic-" + createHash("sha256").update(JSON.stringify(g)).digest("hex"),
-        }),
+        createCube(
+          g,
+          gdpSchema,
+          g === gdpRows
+            ? wb
+            : {
+                datasetId: wb.datasetId,
+                revision:
+                  "fixture:synthetic-" +
+                  createHash("sha256").update(JSON.stringify(g)).digest("hex"),
+              },
+        ),
         concordance,
       ),
     ];
@@ -250,86 +266,141 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     version: 1,
     dimensions: ["country", "year"],
     measures: ["gdp-per-capita"],
-    calculatedMeasures: [{
-      id: "gdp-per-capita",
-      name: "GDP per capita",
-      unit: "USD/person",
-      expression: {
-        kind: "binary",
-        operator: "/",
-        left: { kind: "measure", measureId: "gdp-current-usd" },
-        right: { kind: "measure", measureId: "population" },
+    calculatedMeasures: [
+      {
+        id: "gdp-per-capita",
+        name: "GDP per capita",
+        unit: "USD/person",
+        expression: {
+          kind: "binary",
+          operator: "/",
+          left: { kind: "measure", measureId: "gdp-current-usd" },
+          right: { kind: "measure", measureId: "population" },
+        },
       },
-    }],
+    ],
   };
   const countryId = (name: string) =>
-    "country:" + (name === "United States of America" ? "usa" : name.toLowerCase());
-  const key = (id: string, yr: string) => getCellKey({
-    members: [canonicalMember("country", id), canonicalMember("year", "year:" + yr)],
-  });
+    "country:" +
+    (name === "United States of America" ? "usa" : name.toLowerCase());
+  const key = (id: string, yr: string) =>
+    getCellKey({
+      members: [
+        canonicalMember("country", id),
+        canonicalMember("year", "year:" + yr),
+      ],
+    });
 
   // Independent numeric oracle: join original CSV records by the concordance,
   // not by UDC coordinates or low-level operators.
   const expected = places.flatMap((place) =>
-    popRows.filter((p) => p.countryCode === place.unCountryCode).map((p) => {
-      const g = gdpRows.find((row) => row.countryCode === place.alphaCode && row.year === p.year)!;
-      return {
-        id: countryId(place.countryName),
-        year: p.year,
-        population: Number(p.population) * 1000,
-        gdp: Number(g.gdp),
-        popRow: popRows.indexOf(p) + 1,
-        gdpRow: gdpRows.indexOf(g) + 1,
-        m49: p.countryCode,
-        iso: g.countryCode,
-      };
-    }),
+    popRows
+      .filter((p) => p.countryCode === place.unCountryCode)
+      .map((p) => {
+        const g = gdpRows.find(
+          (row) => row.countryCode === place.alphaCode && row.year === p.year,
+        )!;
+        return {
+          id: countryId(place.countryName),
+          year: p.year,
+          population: Number(p.population) * 1000,
+          gdp: Number(g.gdp),
+          popRow: popRows.indexOf(p) + 1,
+          gdpRow: gdpRows.indexOf(g) + 1,
+          m49: p.countryCode,
+          iso: g.countryCode,
+        };
+      }),
   );
 
   function run(query: QuerySpec, cubes = sources()) {
     const decoded: unknown = JSON.parse(JSON.stringify(query));
     validateQuery(decoded);
-    const plan = planQuery(decoded, { sources: cubes.map(describeQuerySource) });
+    const plan = planQuery(decoded, {
+      sources: cubes.map(describeQuerySource),
+    });
     return executeQuery(JSON.parse(JSON.stringify(plan)), { cubes });
   }
 
   it("discovers both hidden operands and matches every independently joined CSV observation and source row", () => {
     const cubes = sources();
-    const plan = planQuery(ratioQuery, { sources: cubes.map(describeQuerySource) });
-    expect(plan.sources.flatMap((s) => s.measureIds).sort()).toEqual(["gdp-current-usd", "population"]);
+    const plan = planQuery(ratioQuery, {
+      sources: cubes.map(describeQuerySource),
+    });
+    expect(plan.sources.flatMap((s) => s.measureIds).sort()).toEqual([
+      "gdp-current-usd",
+      "population",
+    ]);
     expect(plan.steps).toEqual(["integrate", "calculate", "project"]);
     expect(expected).toHaveLength(6);
     const result = run(ratioQuery, cubes);
     expect(result.observations).toHaveLength(expected.length);
-    expect(result.measures).toMatchObject([{ id: "gdp-per-capita", unit: "USD/person", aggregation: "none" }]);
+    expect(result.measures).toMatchObject([
+      { id: "gdp-per-capita", unit: "USD/person", aggregation: "none" },
+    ]);
     for (const e of expected) {
-      const row = result.observations.find((r) => r.cellKey === key(e.id, e.year));
+      const row = result.observations.find(
+        (r) => r.cellKey === key(e.id, e.year),
+      );
       expect(row).toBeDefined();
       expect(Object.keys(row!.values)).toEqual(["gdp-per-capita"]);
       const value = row!.values["gdp-per-capita"];
       expect(value?.value).toBeCloseTo(e.gdp / e.population, 8);
-      expect(value).toMatchObject({ inputs: [
-        { measureId: "gdp-current-usd", contributors: [{
-          snapshot: wb, sourceRow: e.gdpRow, unit: "USD",
-          sourceCoordinate: { members: [expect.objectContaining({ code: e.iso }), expect.objectContaining({ code: e.year })] },
-          concordanceRevision: "concordance:fixtures-v1",
-        }] },
-        { measureId: "population", contributors: [{
-          snapshot: un, sourceRow: e.popRow, unit: "persons",
-          sourceCoordinate: { members: [expect.objectContaining({ code: e.m49 }), expect.objectContaining({ code: e.year })] },
-          concordanceRevision: "concordance:fixtures-v1",
-        }] },
-      ] });
+      expect(value).toMatchObject({
+        inputs: [
+          {
+            measureId: "gdp-current-usd",
+            contributors: [
+              {
+                snapshot: wb,
+                sourceRow: e.gdpRow,
+                unit: "USD",
+                sourceCoordinate: {
+                  members: [
+                    expect.objectContaining({ code: e.iso }),
+                    expect.objectContaining({ code: e.year }),
+                  ],
+                },
+                concordanceRevision: "concordance:fixtures-v1",
+              },
+            ],
+          },
+          {
+            measureId: "population",
+            contributors: [
+              {
+                snapshot: un,
+                sourceRow: e.popRow,
+                unit: "persons",
+                sourceCoordinate: {
+                  members: [
+                    expect.objectContaining({ code: e.m49 }),
+                    expect.objectContaining({ code: e.year }),
+                  ],
+                },
+                concordanceRevision: "concordance:fixtures-v1",
+              },
+            ],
+          },
+        ],
+      });
     }
-    const china = result.observations.find((r) => r.cellKey === key("country:china", "1960"));
-    expect(china?.values["gdp-per-capita"]?.value).toBeCloseTo(61377930682.0013 / 650680114, 8);
+    const china = result.observations.find(
+      (r) => r.cellKey === key("country:china", "1960"),
+    );
+    expect(china?.values["gdp-per-capita"]?.value).toBeCloseTo(
+      61377930682.0013 / 650680114,
+      8,
+    );
     expect(result.snapshots).toEqual(expect.arrayContaining([un, wb]));
   });
 
   it("selects only the required source from a multi-source catalog", () => {
     const cubes = sources();
     const query: QuerySpec = {
-      version: 1, dimensions: ["year"], measures: ["population"],
+      version: 1,
+      dimensions: ["year"],
+      measures: ["population"],
     };
     const plan = planQuery(query, { sources: cubes.map(describeQuerySource) });
     expect(plan.sources.map((s) => s.source.snapshot)).toEqual([un]);
@@ -337,7 +408,8 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(result.observations).toHaveLength(2);
     for (const row of result.observations) {
       const year = row.coordinate.members[0].id;
-      const total = expected.filter((e) => "year:" + e.year === year)
+      const total = expected
+        .filter((e) => "year:" + e.year === year)
         .reduce((sum, e) => sum + e.population, 0);
       expect(row.values.population?.value).toBeCloseTo(total, 4);
     }
@@ -347,41 +419,81 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
   it("calculates regional ratios of totals with explicit hierarchy and contributor evidence", () => {
     // This is a fixture hierarchy, not an imported official classification.
     const hierarchy = createHierarchy({
-      key: "fixture-geography", dimensionId: "country", revision: "v1",
-      edges: [["country:india", "asia"], ["country:china", "asia"], ["country:usa", "north-america"]]
-        .map(([child, parent], index) => ({
-          child: canonicalMember("country", child),
-          parent: canonicalMember("country", parent),
-          provenance: {
-            snapshot: { datasetId: "fixture-geography", revision: "v1" },
-            sourceRow: index + 1, mappingRevision: "v1",
-          },
-        })),
+      key: "fixture-geography",
+      dimensionId: "country",
+      revision: "v1",
+      edges: [
+        ["country:india", "asia"],
+        ["country:china", "asia"],
+        ["country:usa", "north-america"],
+      ].map(([child, parent], index) => ({
+        child: canonicalMember("country", child),
+        parent: canonicalMember("country", parent),
+        provenance: {
+          snapshot: { datasetId: "fixture-geography", revision: "v1" },
+          sourceRow: index + 1,
+          mappingRevision: "v1",
+        },
+      })),
     });
     const query: QuerySpec = {
       ...ratioQuery,
-      rollups: [{ hierarchyKey: hierarchy.key, revision: hierarchy.revision, targetMembers: ["asia", "north-america"] }],
+      rollups: [
+        {
+          hierarchyKey: hierarchy.key,
+          revision: hierarchy.revision,
+          targetMembers: ["asia", "north-america"],
+        },
+      ],
     };
     const cubes = sources();
-    const plan = planQuery(query, { sources: cubes.map(describeQuerySource), hierarchies: [hierarchy] });
+    const plan = planQuery(query, {
+      sources: cubes.map(describeQuerySource),
+      hierarchies: [hierarchy],
+    });
     const result = executeQuery(plan, { cubes, hierarchies: [hierarchy] });
     expect(result.observations).toHaveLength(4);
     expect(result.hierarchyRollups).toHaveLength(1);
     for (const row of result.observations) {
-      const region = row.coordinate.members.find((m) => m.dimensionId === "country")!.id;
-      const yr = row.coordinate.members.find((m) => m.dimensionId === "year")!.id;
-      const group = expected.filter((e) => "year:" + e.year === yr &&
-        (region === "asia" ? e.id !== "country:usa" : e.id === "country:usa"));
+      const region = row.coordinate.members.find(
+        (m) => m.dimensionId === "country",
+      )!.id;
+      const yr = row.coordinate.members.find(
+        (m) => m.dimensionId === "year",
+      )!.id;
+      const group = expected.filter(
+        (e) =>
+          "year:" + e.year === yr &&
+          (region === "asia" ? e.id !== "country:usa" : e.id === "country:usa"),
+      );
       const totalGDP = group.reduce((sum, e) => sum + e.gdp, 0);
       const totalPop = group.reduce((sum, e) => sum + e.population, 0);
       const value = row.values["gdp-per-capita"];
       expect(value?.value).toBeCloseTo(totalGDP / totalPop, 8);
-      expect(value).toMatchObject({ inputs: [
-        { measureId: "gdp-current-usd", contributors: expect.arrayContaining(group.map((e) => expect.objectContaining({ snapshot: wb, sourceRow: e.gdpRow }))) },
-        { measureId: "population", contributors: expect.arrayContaining(group.map((e) => expect.objectContaining({ snapshot: un, sourceRow: e.popRow }))) },
-      ] });
+      expect(value).toMatchObject({
+        inputs: [
+          {
+            measureId: "gdp-current-usd",
+            contributors: expect.arrayContaining(
+              group.map((e) =>
+                expect.objectContaining({ snapshot: wb, sourceRow: e.gdpRow }),
+              ),
+            ),
+          },
+          {
+            measureId: "population",
+            contributors: expect.arrayContaining(
+              group.map((e) =>
+                expect.objectContaining({ snapshot: un, sourceRow: e.popRow }),
+              ),
+            ),
+          },
+        ],
+      });
       if (region === "asia") {
-        const mean = group.reduce((sum, e) => sum + e.gdp / e.population, 0) / group.length;
+        const mean =
+          group.reduce((sum, e) => sum + e.gdp / e.population, 0) /
+          group.length;
         expect(value?.value).not.toBeCloseTo(mean, 4);
       }
     }
@@ -391,53 +503,105 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     const query: QuerySpec = {
       ...ratioQuery,
       filters: [{ dimensionId: "year", memberIds: ["year:1960", "year:2010"] }],
-      measureFilter: { kind: "compare", measureId: "population", operator: "gte", value: 300000000 },
-      topN: { measureId: "gdp-per-capita", direction: "desc", n: 1, partitionBy: ["year"], ties: "exact" },
+      measureFilter: {
+        kind: "compare",
+        measureId: "population",
+        operator: "gte",
+        value: 300000000,
+      },
+      topN: {
+        measureId: "gdp-per-capita",
+        direction: "desc",
+        n: 1,
+        partitionBy: ["year"],
+        ties: "exact",
+      },
     };
     const result = run(query);
-    const winners = ["1960", "2010"].map((yr) =>
-      expected.filter((e) => e.year === yr && e.population >= 300000000)
-        .sort((a, b) => b.gdp / b.population - a.gdp / a.population)[0],
+    const winners = ["1960", "2010"].map(
+      (yr) =>
+        expected
+          .filter((e) => e.year === yr && e.population >= 300000000)
+          .sort((a, b) => b.gdp / b.population - a.gdp / a.population)[0],
     );
-    expect(result.observations.map((r) => r.cellKey).sort()).toEqual(winners.map((e) => key(e.id, e.year)).sort());
-    const sliced = run({ ...query, filters: [{ dimensionId: "year", memberIds: ["year:1960"] }] });
-    expect(sliced.observations.map((r) => r.cellKey)).toEqual([key(winners[0].id, "1960")]);
+    expect(result.observations.map((r) => r.cellKey).sort()).toEqual(
+      winners.map((e) => key(e.id, e.year)).sort(),
+    );
+    const sliced = run({
+      ...query,
+      filters: [{ dimensionId: "year", memberIds: ["year:1960"] }],
+    });
+    expect(sliced.observations.map((r) => r.cellKey)).toEqual([
+      key(winners[0].id, "1960"),
+    ]);
   });
 
   it("distinguishes absent, null, and zero operands using explicitly perturbed fixture rows", () => {
-    const p = popRows.map((row) => row.countryCode === "156" && row.year === "1960" ? { ...row, population: "0" } : row);
-    const g = gdpRows.filter((row) => !(row.countryCode === "USA" && row.year === "2010"))
-      .map((row) => row.countryCode === "IND" && row.year === "1960" ? { ...row, gdp: "" } : row);
+    const p = popRows.map((row) =>
+      row.countryCode === "156" && row.year === "1960"
+        ? { ...row, population: "0" }
+        : row,
+    );
+    const g = gdpRows
+      .filter((row) => !(row.countryCode === "USA" && row.year === "2010"))
+      .map((row) =>
+        row.countryCode === "IND" && row.year === "1960"
+          ? { ...row, gdp: "" }
+          : row,
+      );
     const cubes = sources(p, g);
-    const query: QuerySpec = { ...ratioQuery, join: "full", measures: ["population", "gdp-current-usd", "gdp-per-capita"] };
+    const query: QuerySpec = {
+      ...ratioQuery,
+      join: "full",
+      measures: ["population", "gdp-current-usd", "gdp-per-capita"],
+    };
     const result = run(query, cubes);
     expect(result.observations).toHaveLength(6);
-    const at = (id: string, yr: string) => result.observations.find((r) => r.cellKey === key(id, yr))!;
+    const at = (id: string, yr: string) =>
+      result.observations.find((r) => r.cellKey === key(id, yr))!;
     expect(at("country:china", "1960").values.population?.value).toBe(0);
-    expect(at("country:china", "1960").values["gdp-per-capita"]?.value).toBeNull();
-    expect(at("country:india", "1960").values["gdp-current-usd"]?.value).toBeNull();
-    expect(at("country:india", "1960").values["gdp-per-capita"]?.value).toBeNull();
+    expect(
+      at("country:china", "1960").values["gdp-per-capita"]?.value,
+    ).toBeNull();
+    expect(
+      at("country:india", "1960").values["gdp-current-usd"]?.value,
+    ).toBeNull();
+    expect(
+      at("country:india", "1960").values["gdp-per-capita"]?.value,
+    ).toBeNull();
     const missing = at("country:usa", "2010");
     expect(Object.hasOwn(missing.values, "gdp-current-usd")).toBe(false);
     expect(Object.hasOwn(missing.values, "gdp-per-capita")).toBe(false);
     expect(missing.presence).toBeDefined();
     expect(run(ratioQuery, cubes).observations).toHaveLength(5);
-    expect(() => run({ ...query, dimensions: ["year"] }, cubes)).toThrow(UdcError);
+    expect(() => run({ ...query, dimensions: ["year"] }, cubes)).toThrow(
+      UdcError,
+    );
   });
 
   it("round-trips JSON, is deterministic for reordered canonical observations, and rejects stale revisions", () => {
     const cubes = sources();
     const before = JSON.stringify(cubes);
-    const plan = planQuery(ratioQuery, { sources: cubes.map(describeQuerySource) });
+    const plan = planQuery(ratioQuery, {
+      sources: cubes.map(describeQuerySource),
+    });
     const reordered = [...cubes].reverse().map((cube) => ({
-      ...cube, observations: [...cube.observations].reverse(),
+      ...cube,
+      observations: [...cube.observations].reverse(),
     }));
-    expect(planQuery(ratioQuery, { sources: reordered.map(describeQuerySource) })).toEqual(plan);
+    expect(
+      planQuery(ratioQuery, { sources: reordered.map(describeQuerySource) }),
+    ).toEqual(plan);
     const result = executeQuery(plan, { cubes });
-    expect(executeQuery(JSON.parse(JSON.stringify(plan)), { cubes: reordered })).toEqual(result);
+    expect(
+      executeQuery(JSON.parse(JSON.stringify(plan)), { cubes: reordered }),
+    ).toEqual(result);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
     expect(JSON.stringify(cubes)).toBe(before);
-    const revised = sources(popRows.map((row) => ({ ...row })), gdpRows);
+    const revised = sources(
+      popRows.map((row) => ({ ...row })),
+      gdpRows,
+    );
     expect(() => executeQuery(plan, { cubes: revised })).toThrow(UdcError);
   });
 });
