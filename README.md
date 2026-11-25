@@ -101,6 +101,8 @@ const cube = createCube(
 
 See [OLAP examples and contracts](docs/olap.md).
 
+For a versioned declarative JSON interface using these operators, see the [query language](docs/query-language.md).
+
 ### Canonical dimension hierarchies
 
 `createHierarchy` accepts **explicit canonical member edges**, not inferred
