@@ -1,8 +1,21 @@
-import type { CanonicalCube, DatasetSnapshot, Dimension, MeasureDefinition } from "./types";
+import type {
+  CanonicalCube,
+  DatasetSnapshot,
+  Dimension,
+  MeasureDefinition,
+} from "./types";
 import type { Hierarchy } from "./hierarchy";
 import type { JoinMode } from "./integrate-cubes";
-import type { CalculatedMeasureDefinition, DiceSelection, MeasureExpression } from "./olap";
-import type { AnalyticalCube, MeasurePredicate, TopNOptions } from "./advanced-olap";
+import type {
+  CalculatedMeasureDefinition,
+  DiceSelection,
+  MeasureExpression,
+} from "./olap";
+import type {
+  AnalyticalCube,
+  MeasurePredicate,
+  TopNOptions,
+} from "./advanced-olap";
 
 export interface QueryRollup {
   hierarchyKey: string;
