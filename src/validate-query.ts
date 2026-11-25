@@ -95,7 +95,11 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
   }
   if (q.limit !== undefined) {
     if (typeof q.limit !== "number") invalid("result limit");
-    assertBound(q.limit as number, UDC_LIMITS.outputObservations, "result limit");
+    assertBound(
+      q.limit as number,
+      UDC_LIMITS.outputObservations,
+      "result limit",
+    );
   }
   if (q.filters !== undefined) {
     const seen = new Set<string>();

@@ -111,7 +111,8 @@ function compareObservations(
       const missing = category(left) - category(right);
       if (missing) return missing;
       if (typeof left === "number" && typeof right === "number") {
-        const comparison = (left < right ? -1 : left > right ? 1 : 0) * direction;
+        const comparison =
+          (left < right ? -1 : left > right ? 1 : 0) * direction;
         if (comparison) return comparison;
       }
     }
@@ -180,9 +181,7 @@ export function executeQuery(
   });
   const orderBy = query.orderBy ?? [];
   const ordered = orderBy.length
-    ? [...cube.observations].sort((a, b) =>
-        compareObservations(a, b, orderBy),
-      )
+    ? [...cube.observations].sort((a, b) => compareObservations(a, b, orderBy))
     : query.topN
       ? cube.observations
       : [...cube.observations].sort((a, b) => compareKey(a.cellKey, b.cellKey));

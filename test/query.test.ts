@@ -949,10 +949,10 @@ describe("query planner and executor coverage boundaries", () => {
     const counted = source("metric", populationRows, "counted", "count");
     const summed = source("metric", populationRows, "summed", "sum");
     expect(() =>
-      plan(
-        { ...base, dimensions: [], measures: ["metric", "metric:count"] },
-        [counted, summed],
-      ),
+      plan({ ...base, dimensions: [], measures: ["metric", "metric:count"] }, [
+        counted,
+        summed,
+      ]),
     ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
   });
 
