@@ -1,10 +1,261 @@
 # Universal Data Cube (UDC)
 
-A small, framework-independent TypeScript library for **semantic integration of tabular datasets**. UDC represents observations as measures at coordinates, reconciles coded dimension members through explicit, versioned concordances, and preserves per-measure source provenance.
+A small, framework-independent TypeScript library for **semantic data integration and declarative OLAP queries**. UDC lets you query measures across datasets by their shared semantic dimensions, reconcile coded members through explicit, versioned concordances, and preserve source provenance for every value.
 
 This is the modern continuation of [Curran Kelleher's original 2014 Universal Data Cube project](https://github.com/curran/udc/tree/gh-pages). The previous AMD/RequireJS version, tests, and annotated documentation are preserved on the historical `gh-pages` branch. The new implementation imports the typed in-memory core and pure golden tests developed in VizHub AI Studio, with provider-neutral snapshot identifiers.
 
-> **Release boundary:** Package versions published to npm are independent of this repository's unreleased source. This PR adds a coordinate coverage API that must be published in a later release before application consumers can install it. The package contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
+> **Release boundary:** This README describes the repository's source, including the unreleased declarative query API. Published npm versions may not include these features until a subsequent release. UDC contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
+
+## Declarative JSON queries
+
+Ask for **what data you want**, not which datasets to join or which operators
+to call. A query names canonical dimensions and measures; UDC resolves the
+necessary sources from a catalog supplied by the application.
+
+The query API is inspired by Cube's JSON query format and Apache Druid's
+structured arithmetic. Queries are plain, versioned JSON: suitable for saving,
+sharing, building in a UI, or generating programmatically.
+
+### 1. Select dimensions and measures
+
+Return observed population by country and year:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population"]
+}
+```
+
+Dimensions determine the output grain; measures determine the output columns.
+The identifiers refer to your semantic catalog, not CSV column names.
+
+### 2. Execute a query
+
+The application supplies canonical cubes (see [creating cubes](#creating-cubes)).
+The following example assumes `populationCube` is a revision-pinned canonical
+cube using the identifiers from the bundled population/GDP example.
+
+```ts
+import {
+  describeQuerySource,
+  validateQuery,
+  planQuery,
+  executeQuery,
+} from "@vizhub/udc";
+import type { QuerySpec } from "@vizhub/udc";
+
+const query: QuerySpec = {
+  version: 1,
+  dimensions: ["country", "year"],
+  measures: ["population"],
+};
+
+const catalog = { sources: [describeQuerySource(populationCube)] };
+
+validateQuery(query);
+const plan = planQuery(query, catalog);
+const result = executeQuery(plan, { cubes: [populationCube] });
+
+console.log(plan.steps);
+console.log(result.observations);
+```
+
+For JSON received from an external caller, use `validateQuery` on the decoded
+value before planning. The planner can operate on catalog metadata alone,
+without loading observation rows. The executor requires exactly the canonical
+source snapshots selected by the plan.
+
+Each result observation contains a canonical coordinate, a cell key, and
+measure values with provenance. For example, extract the country, year and
+numeric population for a chart:
+
+```ts
+const rows = result.observations.map((row) => ({
+  country: row.coordinate.members.find((m) => m.dimensionId === "country")
+    ?.id,
+  year: row.coordinate.members.find((m) => m.dimensionId === "year")?.id,
+  population: row.values.population?.value,
+}));
+```
+
+The projection above is for presentation only; the original result retains
+source provenance, snapshot identities, and semantic revision information.
+
+### 3. Slice and dice
+
+Select a particular year and country, while retaining both dimensions:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population"],
+  "filters": [
+    { "dimensionId": "year", "memberIds": ["year:1960"] },
+    { "dimensionId": "country", "memberIds": ["country:usa"] }
+  ]
+}
+```
+
+Member IDs are canonical IDs, not display labels or inferred ranges. Multiple
+members within a filter are OR-ed; filters across dimensions are AND-ed.
+The identifiers here match the bundled example's concordance.
+
+### 4. Aggregate
+
+Keep only the year dimension to sum population across observed countries:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["year"],
+  "measures": ["population"]
+}
+```
+
+Omitted axes are aggregated according to each measure's declared policy
+(`sum`, `count`, `average`, or `none`). The empty dimensions array requests
+a scalar result. A count aggregation uses the explicit output identity
+`measure-id:count`.
+
+Aggregation is over observations present in the selected data, not a guarantee
+of complete global coverage. Avoid mixing country and pre-aggregated regional
+totals in the source.
+
+### 5. Integrate datasets
+
+Request population and GDP together without naming either physical dataset:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population", "gdp-usd"],
+  "filters": [{ "dimensionId": "year", "memberIds": ["year:1960"] }]
+}
+```
+
+Supply both canonical sources in the catalog:
+
+```ts
+const catalog = {
+  sources: [
+    describeQuerySource(populationCube),
+    describeQuerySource(gdpCube),
+  ],
+};
+const plan = planQuery(query, catalog);
+const result = executeQuery(plan, { cubes: [populationCube, gdpCube] });
+```
+
+Here and in the subsequent examples, `query` is the corresponding JSON
+object after validation. UDC resolves the required measures and joins at
+equivalent canonical coordinates. The default inner join keeps shared
+observations only. Full, left and right joins are also available; directional
+joins require a semantic `joinAnchor` measure. Sparse outer-join results
+cannot be implicitly aggregated.
+
+### 6. Roll up a hierarchy
+
+Aggregate countries to continents using a host-supplied, versioned geography
+hierarchy:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["population"],
+  "rollups": [
+    {
+      "hierarchyKey": "geography",
+      "revision": "v1",
+      "targetMembers": ["africa", "asia", "europe", "americas", "oceania"]
+    }
+  ]
+}
+```
+
+This is an illustrative hierarchy contract, not a hierarchy bundled with UDC.
+Its target IDs must exist, be disjoint and cover all observed members. Supply
+the same approved hierarchy definition in `catalog.hierarchies` and
+`inputs.hierarchies`. Roll-up replaces members on the existing country axis;
+it does not introduce a new dimension. See [canonical dimension hierarchies](#canonical-dimension-hierarchies).
+
+### 7. Calculate, filter and rank
+
+Find the ten highest observed GDP-per-capita values per year, among countries
+with at least one million people, using the two canonical source cubes from
+step 5:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country", "year"],
+  "measures": ["gdp-per-capita"],
+  "calculatedMeasures": [
+    {
+      "id": "gdp-per-capita",
+      "name": "GDP per capita",
+      "unit": "USD/person",
+      "expression": {
+        "kind": "binary",
+        "operator": "/",
+        "left": { "kind": "measure", "measureId": "gdp-usd" },
+        "right": { "kind": "measure", "measureId": "population" }
+      }
+    }
+  ],
+  "measureFilter": {
+    "kind": "compare",
+    "measureId": "population",
+    "operator": "gte",
+    "value": 1000000
+  },
+  "topN": {
+    "measureId": "gdp-per-capita",
+    "direction": "desc",
+    "partitionBy": ["year"],
+    "n": 10,
+    "ties": "exact"
+  }
+}
+```
+
+Arithmetic is a structured expression tree, never an executable string. The
+planner discovers the hidden GDP and population operands even though the output
+contains only GDP per capita. Their source provenance remains available.
+Derived measures are evaluated after aggregation, so a regional ratio is the
+ratio of totals, not an unweighted average of country ratios. Null operands
+or division by zero yield null; absent operands in sparse data remain absent.
+
+### How queries work
+
+```mermaid
+flowchart TD
+    A[JSON QuerySpec] --> B[Validate and plan]
+    C[Authorized semantic catalog] --> B
+    B --> D[Revision-pinned QueryPlan]
+    D --> E[Execute]
+    F[Selected canonical cubes and hierarchies] --> E
+    E --> G[QueryResult with provenance]
+```
+
+Execution applies dimension filters, integration, hierarchy roll-ups,
+aggregation, calculations, measure filters, top-N and output projection in
+that order, skipping unnecessary steps. Ambiguous source providers,
+incompatible grains, invalid expressions and stale plans fail with typed errors
+rather than being guessed or silently corrected.
+
+The v1 query API supports at most two selected source cubes and one calculated
+measure. It does not load data, authorize access, convert units, infer hierarchy
+relationships or support arbitrary sorting and chained calculations. The host
+must supply authorized, immutable inputs and compatible units. Drill-down and
+coverage queries remain available through the lower-level operators.
+
+Read the [complete query language reference](docs/query-language.md) for every
+field, the execution contract, resource limits and missing-data semantics.
 
 ## Watch the presentation
 
@@ -26,7 +277,7 @@ The example loads bundled sample CSVs for UN population, World Bank GDP, and cou
 
 After npm publication, application consumers can install `@vizhub/udc` and import its named functions.
 
-## Quick start
+## Creating cubes
 
 UDC accepts structured rows, not raw CSV/TSV files. Parsing is the caller's responsibility; the published library has no production dependencies.
 
@@ -101,7 +352,7 @@ const cube = createCube(
 
 See [OLAP examples and contracts](docs/olap.md).
 
-For a versioned declarative JSON interface using these operators, see the [query language](docs/query-language.md).
+For the high-level interface that composes these operators, see [declarative JSON queries](#declarative-json-queries).
 
 ### Canonical dimension hierarchies
 
@@ -154,6 +405,8 @@ Failures throw a typed `UdcError` carrying a `UdcErrorCode` (`INVALID`, `LIMIT`,
 
 - [Quick start](docs/quickstart.md)
 - [Concepts and data model](docs/concepts.md)
+- [Declarative query language](docs/query-language.md)
+- [OLAP operators and contracts](docs/olap.md)
 - [API reference](docs/api.md)
 - [Scope, limits, and security](docs/limitations.md)
 - [Migrating from UDC 2014](docs/migration-from-2014.md)
