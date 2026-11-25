@@ -36,6 +36,12 @@ jobs:
       - name: Example
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         run: npm run example
+      - name: Query code coverage
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          version=$(node -p "require('vitest/package.json').version")
+          npm install --no-save "@vitest/coverage-v8@$version"
+          npm test -- --coverage --coverage.provider=v8 --coverage.reporter=text --coverage.include='src/{validate-query,plan-query,execute-query}.ts'
       - name: Show formatting diff (advisory)
         continue-on-error: true
         if: ${{ !cancelled() && steps.format.outcome == 'failure' }}

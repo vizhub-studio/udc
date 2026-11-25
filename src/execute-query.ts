@@ -1,0 +1,176 @@
+import { aggregateCube } from "./aggregate-cube";
+import { integrateCubes } from "./integrate-cubes";
+import { calculateMeasure, diceCube, rollupCube } from "./olap";
+import { filterCube, topNCube, type AnalyticalCube } from "./advanced-olap";
+import { getCellKey } from "./coordinate";
+import { assertBound, UDC_LIMITS, UdcError } from "./limits";
+import { describeQuerySource, planQuery } from "./plan-query";
+import type {
+  QueryInputs,
+  QueryPlan,
+  QueryResult,
+  QueryPlanSource,
+} from "./query-types";
+import type { CanonicalCube } from "./types";
+
+// Canonical object key order for JSON round-tripped plans and metadata.
+function stableJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item: unknown) => {
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const record = item as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(record)
+          .sort()
+          .map((key) => [key, record[key]]),
+      );
+    }
+    return item;
+  });
+}
+
+function projectSource(
+  cube: CanonicalCube,
+  selected: QueryPlanSource,
+): CanonicalCube {
+  const ids = new Set(selected.measureIds);
+  const declared = new Set(cube.measures.map((m) => m.id));
+  const axes = new Set(cube.dimensions.map((d) => d.id));
+  const seen = new Set<string>();
+  assertBound(cube.observations.length, UDC_LIMITS.rows, "query source rows");
+  return {
+    ...cube,
+    measures: cube.measures
+      .filter((m) => ids.has(m.id))
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    observations: cube.observations.map((row) => {
+      if (getCellKey(row.coordinate) !== row.cellKey || seen.has(row.cellKey))
+        throw new UdcError("INVALID", "Invalid or duplicate source coordinate");
+      seen.add(row.cellKey);
+      const actual = row.coordinate.members.map((m) => m.dimensionId);
+      if (
+        actual.length !== axes.size ||
+        new Set(actual).size !== axes.size ||
+        row.coordinate.members.some(
+          (m) => m.kind !== "canonical" || !axes.has(m.dimensionId),
+        )
+      )
+        throw new UdcError("INCOMPATIBLE", "Invalid source coordinate grain");
+      if (
+        Object.keys(row.values).length !== declared.size ||
+        Object.keys(row.values).some((id) => !declared.has(id))
+      )
+        throw new UdcError("INCOMPATIBLE", "Invalid source measure set");
+      for (const id of ids) {
+        const value = row.values[id];
+        if (
+          !value ||
+          (value.value !== null && !Number.isFinite(value.value)) ||
+          !value.provenance
+        )
+          throw new UdcError("INVALID", "Invalid source measure value");
+      }
+      return {
+        ...row,
+        values: Object.fromEntries(
+          Object.entries(row.values).filter(([id]) => ids.has(id)),
+        ),
+      };
+    }),
+  };
+}
+
+/** Execute only against the revision-pinned inputs in the validated plan. */
+export function executeQuery(
+  plan: QueryPlan,
+  inputs: QueryInputs,
+): QueryResult {
+  if (!plan || plan.version !== 1 || !Array.isArray(plan.sources))
+    throw new UdcError("INVALID", "Invalid query plan");
+  assertBound(inputs.cubes.length, UDC_LIMITS.cubes, "query input cubes");
+  // Rebuild from actual metadata rather than trusting caller-supplied steps or source IDs.
+  const fresh = planQuery(plan.query, {
+    sources: inputs.cubes.map(describeQuerySource),
+    hierarchies: inputs.hierarchies,
+  });
+  if (
+    stableJson(fresh) !== stableJson(plan) ||
+    inputs.cubes.length !== plan.sources.length
+  )
+    throw new UdcError(
+      "CONFLICT",
+      "Query plan does not match supplied source revisions or steps",
+    );
+
+  const query = fresh.query;
+  const sources = fresh.sources.map((selected) => {
+    const cube = inputs.cubes.find(
+      (c) => c.snapshots[0].datasetId === selected.source.snapshot.datasetId,
+    )!;
+    return diceCube(projectSource(cube, selected), query.filters ?? []);
+  });
+  let cube: AnalyticalCube =
+    sources.length === 1
+      ? sources[0]
+      : integrateCubes(sources[0], sources[1], { join: query.join ?? "inner" });
+  for (const rollup of query.rollups ?? []) {
+    if (cube.stage !== "canonical" && cube.stage !== "aggregated")
+      throw new UdcError("INCOMPATIBLE", "Rollup requires dense input");
+    const hierarchy = inputs.hierarchies!.find(
+      (h) => h.key === rollup.hierarchyKey && h.revision === rollup.revision,
+    )!;
+    cube = rollupCube(cube, hierarchy, rollup.targetMembers);
+  }
+  if (fresh.steps.includes("aggregate")) {
+    if (cube.stage !== "canonical" && cube.stage !== "aggregated")
+      throw new UdcError("INCOMPATIBLE", "Aggregation requires dense input");
+    cube = aggregateCube(cube, query.dimensions);
+  }
+  const calculation = query.calculatedMeasures?.[0];
+  if (calculation) cube = calculateMeasure(cube, calculation);
+  if (query.measureFilter) cube = filterCube(cube, query.measureFilter);
+  if (query.topN) cube = topNCube(cube, query.topN);
+  const measures = query.measures.map((id) => {
+    const measure = cube.measures.find((m) => m.id === id);
+    if (!measure)
+      throw new UdcError(
+        "INCOMPATIBLE",
+        "Missing planned output measure: " + id,
+      );
+    return measure;
+  });
+  const rows = query.topN
+    ? cube.observations
+    : [...cube.observations].sort((a, b) =>
+        a.cellKey < b.cellKey ? -1 : a.cellKey > b.cellKey ? 1 : 0,
+      );
+  return {
+    stage: "query-result",
+    inputStage: cube.stage,
+    dimensions: query.dimensions.map((id) =>
+      cube.dimensions.find((d) => d.id === id)!,
+    ),
+    measures,
+    observations: rows.map((row) => ({
+      coordinate: {
+        members: query.dimensions.map((id) =>
+          row.coordinate.members.find((m) => m.dimensionId === id)!,
+        ),
+      },
+      cellKey: row.cellKey,
+      values: Object.fromEntries(
+        query.measures
+          .filter((id) => Object.hasOwn(row.values, id))
+          .map((id) => [id, row.values[id]]),
+      ),
+      ...("presence" in row && row.presence ? { presence: row.presence } : {}),
+    })),
+    snapshots: cube.snapshots,
+    schemaRevisions: cube.schemaRevisions,
+    concordanceRevisions: cube.concordanceRevisions,
+    ...("hierarchyRollups" in cube
+      ? { hierarchyRollups: cube.hierarchyRollups }
+      : {}),
+    ...("join" in cube ? { join: cube.join } : {}),
+    ...(cube.stage === "calculated" ? { definition: cube.definition } : {}),
+  };
+}

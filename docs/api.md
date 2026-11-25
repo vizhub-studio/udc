@@ -57,3 +57,12 @@ hierarchy editor, or cube aggregation operation.
 The public exports `diceCube`, `rollupCube`, `calculateMeasure`, `DiceSelection`, `HierarchyRollupEvidence`, `MeasureExpression`, `CalculatedMeasureDefinition`, `CalculatedMeasureValue`, `CalculatedObservation`, and `CalculatedCube` are documented in [OLAP operations](olap.md). The calculated stage is deliberately distinct from canonical and aggregated stages.
 
 The advanced exports `drilldownCube`, `filterCube`, `rankCube`, `topNCube`, `AnalyticalCube`, `MeasurePredicate`, `RankOptions`, `RankedObservation`, `TopNOptions` and `NavigableHierarchy` are documented in [OLAP operations](olap.md). The return type of `createHierarchy` adds children and descendants navigation without changing the structural base `Hierarchy` interface.
+
+## Declarative query API
+
+- `validateQuery(value)`: assert that unknown JSON conforms to QuerySpec v1.
+- `describeQuerySource(cube)`: derive immutable catalog metadata from a canonical cube.
+- `planQuery(query, catalog)`: resolve dependencies and produce an inspectable, JSON-serializable QueryPlan.
+- `executeQuery(plan, inputs)`: verify source revision pins and execute the plan, returning a terminal QueryResult.
+
+See [query language](query-language.md) for fields, execution order, and limits.
