@@ -943,3 +943,82 @@ describe("query edge cases and error contracts", () => {
     );
   });
 });
+
+describe("query planner and executor coverage boundaries", () => {
+  it("rejects distinct output IDs that collide at the raw source grain", () => {
+    const counted = source("metric", populationRows, "counted", "count");
+    const summed = source("metric", populationRows, "summed", "sum");
+    expect(() =>
+      plan(
+        { ...base, dimensions: [], measures: ["metric", "metric:count"] },
+        [counted, summed],
+      ),
+    ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+  });
+
+  it("rejects a calculated ID that collides with a raw count operand", () => {
+    const counted = source("metric", populationRows, "counted", "count");
+    expect(() =>
+      plan(
+        {
+          ...base,
+          dimensions: [],
+          measures: ["metric"],
+          calculatedMeasures: [
+            {
+              ...ratio,
+              id: "metric",
+              expression: { kind: "measure", measureId: "metric:count" },
+            },
+          ],
+        },
+        [counted],
+      ),
+    ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+  });
+
+  it("projects multiple measures from a single source in requested order", () => {
+    const multi: CanonicalCube = {
+      ...population,
+      measures: [...population.measures, ...gdp.measures],
+      observations: population.observations.map((row, i) => ({
+        ...row,
+        values: {
+          ...row.values,
+          gdp: {
+            ...gdp.observations[i].values.gdp,
+            provenance: {
+              ...gdp.observations[i].values.gdp.provenance,
+              snapshot: population.snapshots[0],
+            },
+          },
+        },
+      })),
+    };
+    const query: QuerySpec = {
+      ...base,
+      measures: ["population", "gdp"],
+      join: "inner",
+    };
+    const result = run(query, [multi]);
+    expect(result.measures.map((m) => m.id)).toEqual(query.measures);
+    expect(result.observations).toHaveLength(5);
+    for (const row of result.observations) {
+      expect(row.values).toEqual(
+        multi.observations.find((o) => o.cellKey === row.cellKey)?.values,
+      );
+    }
+    expect(
+      run(query, [{ ...multi, measures: [...multi.measures].reverse() }]),
+    ).toEqual(result);
+  });
+
+  it("accepts repeated member selectors without duplicating observations", () => {
+    const result = run({
+      ...base,
+      filters: [{ dimensionId: "time", memberIds: ["2020", "2020"] }],
+    });
+    expect(result.observations).toHaveLength(3);
+    expect(new Set(result.observations.map((row) => row.cellKey)).size).toBe(3);
+  });
+});
