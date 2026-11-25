@@ -272,7 +272,7 @@ npm run check
 npm run example
 ```
 
-The example loads bundled sample CSVs for UN population, World Bank GDP, and country-code concordances and prints joined observations. No VizHub server or credentials are required.
+The example loads bundled historical sample CSVs for UN population, World Bank GDP, and country-code concordances, then validates, plans, and executes declarative queries for joined observations and ranked GDP per capita. No VizHub server or credentials are required. The [CSV integration tests](test/golden.test.ts) independently join the original rows and verify numerical results, source lineage, regional ratios of totals, missingness, and JSON round-trips. The fixtures and illustrative hierarchy are test evidence, not live or officially approved data.
 
 After npm publication, application consumers can install `@vizhub/udc` and import its named functions.
 
