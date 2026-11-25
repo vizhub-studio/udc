@@ -33,7 +33,7 @@ The identifiers refer to your semantic catalog, not CSV column names.
 
 ### 2. Execute a query
 
-The application supplies canonical cubes (see [creating cubes](#creating-cubes)).
+The application supplies canonical cubes (see [creating cubes](#quick-start)).
 The following example assumes `populationCube` is a revision-pinned canonical
 cube using the identifiers from the bundled population/GDP example.
 
@@ -73,8 +73,7 @@ numeric population for a chart:
 
 ```ts
 const rows = result.observations.map((row) => ({
-  country: row.coordinate.members.find((m) => m.dimensionId === "country")
-    ?.id,
+  country: row.coordinate.members.find((m) => m.dimensionId === "country")?.id,
   year: row.coordinate.members.find((m) => m.dimensionId === "year")?.id,
   population: row.values.population?.value,
 }));
@@ -277,7 +276,7 @@ The example loads bundled sample CSVs for UN population, World Bank GDP, and cou
 
 After npm publication, application consumers can install `@vizhub/udc` and import its named functions.
 
-## Creating cubes
+## Quick start
 
 UDC accepts structured rows, not raw CSV/TSV files. Parsing is the caller's responsibility; the published library has no production dependencies.
 
