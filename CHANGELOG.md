@@ -1,5 +1,11 @@
 # Change log
 
+## Unreleased — declarative JSON queries
+
+- Add a versioned semantic QuerySpec, bounded JSON validation, deterministic source planning, and execution through existing OLAP operators.
+- Preserve lineage, revision pins and explicit sparse join semantics; reject ambiguous providers and incompatible grains.
+- Add golden workflows, regression tests, and a query language reference. No publication or application integration.
+
 ## Unreleased — advanced OLAP queries
 
 - Add provenance-preserving drill-down from explicitly supplied finer-grained data and deterministic hierarchy children/descendants navigation.
