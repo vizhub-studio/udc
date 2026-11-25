@@ -6,8 +6,6 @@ This is the modern continuation of [Curran Kelleher's original 2014 Universal Da
 
 Video on this: https://youtu.be/69E7t4gpCzk
 
-> **Release boundary:** This README describes the repository's source, including the unreleased declarative query API. Published npm versions may not include these features until a subsequent release. UDC contains **no network loader, database, UI, backend API, or VizHub authentication logic**.
-
 ## Declarative JSON queries
 
 Ask for **what data you want**, not which datasets to join or which operators
