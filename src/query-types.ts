@@ -23,6 +23,11 @@ export interface QueryRollup {
   targetMembers: readonly string[];
 }
 
+/** Ordered output field; earlier entries take precedence. */
+export type QueryOrder =
+  | { kind: "dimension"; dimensionId: string; direction: "asc" | "desc" }
+  | { kind: "measure"; measureId: string; direction: "asc" | "desc" };
+
 /** A JSON-only semantic request. No physical source names or executable code. */
 export interface QuerySpec {
   version: 1;
@@ -36,6 +41,8 @@ export interface QuerySpec {
   /** Required for left/right joins: identifies the preserved source semantically. */
   joinAnchor?: string;
   topN?: TopNOptions;
+  orderBy?: readonly QueryOrder[];
+  limit?: number;
 }
 
 /** Metadata for one immutable, canonical source; no rows or loader. */
@@ -62,6 +69,8 @@ export type QueryStep =
   | "calculate"
   | "filter-measures"
   | "top-n"
+  | "order"
+  | "limit"
   | "project";
 export interface QueryPlan {
   version: 1;

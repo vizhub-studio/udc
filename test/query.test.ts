@@ -1022,3 +1022,146 @@ describe("query planner and executor coverage boundaries", () => {
     expect(new Set(result.observations.map((row) => row.cellKey)).size).toBe(3);
   });
 });
+
+describe("query ordering and limits", () => {
+  const orderBy = [
+    { kind: "dimension", dimensionId: "time", direction: "asc" },
+    { kind: "measure", measureId: "population", direction: "desc" },
+  ] as const;
+
+  it("orders lexicographically by multiple keys and limits globally", () => {
+    const query: QuerySpec = { ...base, orderBy, limit: 4 };
+    const result = run(query);
+    expect(result.observations.map((r) => r.values.population?.value)).toEqual([
+      90, 30, 10, 20,
+    ]);
+    expect(plan(query).steps).toEqual(["order", "limit", "project"]);
+    const reversed = {
+      ...population,
+      observations: [...population.observations].reverse(),
+    };
+    expect(run(query, [reversed])).toEqual(result);
+    expect(
+      executeQuery(JSON.parse(JSON.stringify(plan(query))), {
+        cubes: [population],
+      }),
+    ).toEqual(result);
+  });
+
+  it("preserves provenance and canonical tie breaking", () => {
+    const tied = source("population", [
+      ["b", "2020", 10],
+      ["a", "2020", 10],
+    ]);
+    const query: QuerySpec = { ...base, orderBy: [orderBy[1]] };
+    const result = run(query, [tied]);
+    expect(result.observations).toEqual(run(base, [tied]).observations);
+    expect(run({ ...query, limit: 1 }, [tied]).observations).toEqual(
+      result.observations.slice(0, 1),
+    );
+  });
+
+  it("puts numeric values before null and absent in either direction", () => {
+    const sparse = source("gdp", [
+      ["a", "2020", null],
+      ["d", "2020", 1],
+      ["c", "2020", 5],
+    ]);
+    for (const direction of ["asc", "desc"] as const) {
+      const query: QuerySpec = {
+        ...base,
+        measures: ["population", "gdp"],
+        join: "full",
+        orderBy: [{ kind: "measure", measureId: "gdp", direction }],
+      };
+      const result = run(query, [population, sparse]);
+      expect(result.observations.map((r) => r.values.gdp?.value)).toEqual([
+        ...(direction === "asc" ? [1, 5] : [5, 1]),
+        null,
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(result.observations[2].values.gdp).toBeDefined();
+      expect(Object.hasOwn(result.observations[3].values, "gdp")).toBe(false);
+    }
+  });
+
+  it("orders after partitioned top-N and limits after sorting", () => {
+    const result = run({
+      ...base,
+      topN: { measureId: "population", n: 1, partitionBy: ["time"] },
+      orderBy: [{ kind: "measure", measureId: "population", direction: "asc" }],
+      limit: 1,
+    });
+    expect(result.observations.map((r) => r.values.population?.value)).toEqual([
+      20,
+    ]);
+  });
+
+  it("sorts calculated measures and aggregated counts at final grain", () => {
+    const result = run(
+      {
+        ...ratioQuery,
+        filters,
+        orderBy: [{ kind: "measure", measureId: "ratio", direction: "desc" }],
+        limit: 1,
+      },
+      [population, gdp],
+    );
+    expect(result.observations[0].values.ratio?.value).toBe(20);
+    const count = source("countable", populationRows, "countable", "count");
+    const counted = run(
+      {
+        ...base,
+        dimensions: ["time"],
+        measures: ["countable:count"],
+        orderBy: [
+          { kind: "measure", measureId: "countable:count", direction: "asc" },
+        ],
+      },
+      [count],
+    );
+    expect(
+      counted.observations.map((r) => r.values["countable:count"]?.value),
+    ).toEqual([1, 3]);
+  });
+
+  it("supports zero, omitted and oversized-within-budget limits", () => {
+    expect(run({ ...base, limit: 0 }).observations).toEqual([]);
+    expect(run({ ...base, limit: 0 }).measures).toEqual(run(base).measures);
+    expect(run({ ...base, limit: 100 }).observations).toEqual(
+      run(base).observations,
+    );
+    expect(run({ ...base, orderBy: [] })).toEqual(run(base));
+  });
+
+  it.each([
+    { ...base, limit: -1 },
+    { ...base, limit: 1.5 },
+    { ...base, limit: 10001 },
+    { ...base, limit: "2" },
+    { ...base, orderBy: null },
+    { ...base, orderBy: [{ ...orderBy[0], direction: "random" }] },
+    { ...base, orderBy: [{ ...orderBy[0], measureId: "population" }] },
+    { ...base, orderBy: [orderBy[0], orderBy[0]] },
+  ])("rejects malformed order or limit %#", (query) => {
+    expect(() => validateQuery(query)).toThrow(UdcError);
+  });
+
+  it("rejects hidden sort fields and tampered plans", () => {
+    expect(() =>
+      plan({ ...base, dimensions: ["space"], orderBy: [orderBy[0]] }),
+    ).toThrow(UdcError);
+    expect(() =>
+      plan({
+        ...base,
+        orderBy: [{ kind: "measure", measureId: "gdp", direction: "desc" }],
+      }),
+    ).toThrow(UdcError);
+    const p = plan({ ...base, orderBy, limit: 1 });
+    expect(() =>
+      executeQuery({ ...p, steps: ["project"] }, { cubes: [population] }),
+    ).toThrow(UdcError);
+  });
+});

@@ -64,6 +64,8 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
       "join",
       "joinAnchor",
       "topN",
+      "orderBy",
+      "limit",
     ],
     "query",
   );
@@ -71,6 +73,30 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
   ids(q.dimensions, UDC_LIMITS.columns, "output dimensions");
   if (!ids(q.measures, UDC_LIMITS.columns, "output measures").length)
     invalid("empty measures");
+  if (q.orderBy !== undefined) {
+    const seen = new Set<string>();
+    for (const item of arr(q.orderBy, UDC_LIMITS.columns, "ordering fields")) {
+      const order = obj(
+        item,
+        ["kind", "dimensionId", "measureId", "direction"],
+        "ordering field",
+      );
+      oneOf(order.kind, ["dimension", "measure"]);
+      oneOf(order.direction, ["asc", "desc"]);
+      const dimension = order.kind === "dimension";
+      const field = dimension ? "dimensionId" : "measureId";
+      obj(order, ["kind", field, "direction"], "ordering field");
+      const key = id(order[field]);
+      const identity = order.kind + ":" + key;
+      if (seen.has(identity))
+        throw new UdcError("DUPLICATE", "Duplicate ordering field");
+      seen.add(identity);
+    }
+  }
+  if (q.limit !== undefined) {
+    if (typeof q.limit !== "number") invalid("result limit");
+    assertBound(q.limit as number, UDC_LIMITS.outputObservations, "result limit");
+  }
   if (q.filters !== undefined) {
     const seen = new Set<string>();
     for (const item of arr(

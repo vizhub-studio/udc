@@ -7,6 +7,7 @@ import { assertBound, UDC_LIMITS, UdcError } from "./limits";
 import { describeQuerySource, planQuery } from "./plan-query";
 import type {
   QueryInputs,
+  QueryOrder,
   QueryPlan,
   QueryResult,
   QueryPlanSource,
@@ -79,6 +80,45 @@ function projectSource(
   };
 }
 
+type Observation = AnalyticalCube["observations"][number];
+
+function compareKey(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function compareObservations(
+  a: Observation,
+  b: Observation,
+  orderBy: readonly QueryOrder[],
+): number {
+  for (const order of orderBy) {
+    const direction = order.direction === "asc" ? 1 : -1;
+    if (order.kind === "dimension") {
+      const left = a.coordinate.members.find(
+        (m) => m.dimensionId === order.dimensionId,
+      )!;
+      const right = b.coordinate.members.find(
+        (m) => m.dimensionId === order.dimensionId,
+      )!;
+      const comparison = compareKey(left.id, right.id) * direction;
+      if (comparison) return comparison;
+    } else {
+      const left = a.values[order.measureId]?.value;
+      const right = b.values[order.measureId]?.value;
+      // Numbers first, then explicit null, then absent, in either direction.
+      const category = (value: number | null | undefined) =>
+        value === undefined ? 2 : value === null ? 1 : 0;
+      const missing = category(left) - category(right);
+      if (missing) return missing;
+      if (typeof left === "number" && typeof right === "number") {
+        const comparison = (left < right ? -1 : left > right ? 1 : 0) * direction;
+        if (comparison) return comparison;
+      }
+    }
+  }
+  return compareKey(a.cellKey, b.cellKey);
+}
+
 /** Execute only against the revision-pinned inputs in the validated plan. */
 export function executeQuery(
   plan: QueryPlan,
@@ -138,11 +178,16 @@ export function executeQuery(
       );
     return measure;
   });
-  const rows = query.topN
-    ? cube.observations
-    : [...cube.observations].sort((a, b) =>
-        a.cellKey < b.cellKey ? -1 : a.cellKey > b.cellKey ? 1 : 0,
-      );
+  const orderBy = query.orderBy ?? [];
+  const ordered = orderBy.length
+    ? [...cube.observations].sort((a, b) =>
+        compareObservations(a, b, orderBy),
+      )
+    : query.topN
+      ? cube.observations
+      : [...cube.observations].sort((a, b) => compareKey(a.cellKey, b.cellKey));
+  const rows =
+    query.limit === undefined ? ordered : ordered.slice(0, query.limit);
   return {
     stage: "query-result",
     inputStage: cube.stage,
