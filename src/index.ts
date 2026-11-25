@@ -12,3 +12,7 @@ export * from "./coverage";
 export * from "./hierarchy";
 export * from "./olap";
 export * from "./advanced-olap";
+export * from "./query-types";
+export * from "./validate-query";
+export * from "./plan-query";
+export * from "./execute-query";
