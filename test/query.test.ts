@@ -542,18 +542,61 @@ describe("query edge cases and error contracts", () => {
     { ...base, topN: { measureId: "population", n: 1.5 } },
     { ...base, topN: { measureId: "population", n: 1, direction: "up" } },
     { ...base, topN: { measureId: "population", n: 1, method: "other" } },
-    { ...base, topN: { measureId: "population", n: 1, partitionBy: ["time", "time"] } },
+    {
+      ...base,
+      topN: { measureId: "population", n: 1, partitionBy: ["time", "time"] },
+    },
     { ...base, measureFilter: { kind: "unknown" } },
-    { ...base, measureFilter: { kind: "compare", measureId: "population", operator: "like", value: 1 } },
-    { ...base, measureFilter: { kind: "compare", measureId: "population", operator: "eq", value: "1" } },
+    {
+      ...base,
+      measureFilter: {
+        kind: "compare",
+        measureId: "population",
+        operator: "like",
+        value: 1,
+      },
+    },
+    {
+      ...base,
+      measureFilter: {
+        kind: "compare",
+        measureId: "population",
+        operator: "eq",
+        value: "1",
+      },
+    },
     { ...base, measureFilter: { kind: "not", operand: null } },
     { ...ratioQuery, calculatedMeasures: [{ ...ratio, name: "" }] },
     { ...ratioQuery, calculatedMeasures: [{ ...ratio, name: 12 }] },
-    { ...ratioQuery, calculatedMeasures: [{ ...ratio, name: "x".repeat(257) }] },
-    { ...ratioQuery, calculatedMeasures: [{ ...ratio, expression: { kind: "unknown" } }] },
-    { ...ratioQuery, calculatedMeasures: [{ ...ratio, expression: { ...ratio.expression, operator: "**" } }] },
-    { ...ratioQuery, calculatedMeasures: [{ ...ratio, expression: { kind: "constant", value: NaN } }] },
-    { ...ratioQuery, calculatedMeasures: [{ ...ratio, expression: { kind: "measure", measureId: "gdp", value: 1 } }] },
+    {
+      ...ratioQuery,
+      calculatedMeasures: [{ ...ratio, name: "x".repeat(257) }],
+    },
+    {
+      ...ratioQuery,
+      calculatedMeasures: [{ ...ratio, expression: { kind: "unknown" } }],
+    },
+    {
+      ...ratioQuery,
+      calculatedMeasures: [
+        { ...ratio, expression: { ...ratio.expression, operator: "**" } },
+      ],
+    },
+    {
+      ...ratioQuery,
+      calculatedMeasures: [
+        { ...ratio, expression: { kind: "constant", value: NaN } },
+      ],
+    },
+    {
+      ...ratioQuery,
+      calculatedMeasures: [
+        {
+          ...ratio,
+          expression: { kind: "measure", measureId: "gdp", value: 1 },
+        },
+      ],
+    },
   ])("rejects additional malformed JSON case %#", (query) => {
     expect(() => validateQuery(query)).toThrow(UdcError);
   });
@@ -563,9 +606,17 @@ describe("query edge cases and error contracts", () => {
     const tree = (depth: number): unknown =>
       depth === 0
         ? leaf
-        : { kind: "binary", operator: "+", left: tree(depth - 1), right: tree(depth - 1) };
+        : {
+            kind: "binary",
+            operator: "+",
+            left: tree(depth - 1),
+            right: tree(depth - 1),
+          };
     expect(() =>
-      validateQuery({ ...ratioQuery, calculatedMeasures: [{ ...ratio, expression: tree(6) }] }),
+      validateQuery({
+        ...ratioQuery,
+        calculatedMeasures: [{ ...ratio, expression: tree(6) }],
+      }),
     ).toThrow(expect.objectContaining({ code: "LIMIT" }));
     expect(() =>
       validateQuery({
@@ -580,91 +631,174 @@ describe("query edge cases and error contracts", () => {
       }),
     ).toThrow(expect.objectContaining({ code: "LIMIT" }));
     expect(() =>
-      validateQuery({ ...base, dimensions: Array.from({ length: 101 }, (_, i) => "d" + i) }),
+      validateQuery({
+        ...base,
+        dimensions: Array.from({ length: 101 }, (_, i) => "d" + i),
+      }),
     ).toThrow(expect.objectContaining({ code: "LIMIT" }));
     expect(() =>
-      validateQuery({ ...base, filters: [{ dimensionId: "time", memberIds: Array(10001).fill("2020") }] }),
+      validateQuery({
+        ...base,
+        filters: [
+          { dimensionId: "time", memberIds: Array(10001).fill("2020") },
+        ],
+      }),
     ).toThrow(expect.objectContaining({ code: "LIMIT" }));
   });
 
   it("rejects invalid catalog declarations and ambiguous hierarchy metadata", () => {
     const entry = describeQuerySource(population);
-    expect(() => planQuery(base, { sources: [{ ...entry, dimensions: ["space", "space"] }] }))
-      .toThrow(expect.objectContaining({ code: "DUPLICATE" }));
-    expect(() => planQuery(base, { sources: [{ ...entry, measures: [entry.measures[0], entry.measures[0]] }] }))
-      .toThrow(expect.objectContaining({ code: "DUPLICATE" }));
     expect(() =>
       planQuery(base, {
-        sources: [{ ...entry, measures: [{ ...entry.measures[0], aggregation: "invalid" as AggregationOperator }] }],
+        sources: [{ ...entry, dimensions: ["space", "space"] }],
+      }),
+    ).toThrow(expect.objectContaining({ code: "DUPLICATE" }));
+    expect(() =>
+      planQuery(base, {
+        sources: [
+          { ...entry, measures: [entry.measures[0], entry.measures[0]] },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "DUPLICATE" }));
+    expect(() =>
+      planQuery(base, {
+        sources: [
+          {
+            ...entry,
+            measures: [
+              {
+                ...entry.measures[0],
+                aggregation: "invalid" as AggregationOperator,
+              },
+            ],
+          },
+        ],
       }),
     ).toThrow(expect.objectContaining({ code: "INVALID" }));
-    expect(() => planQuery({ ...base, rollups }, { sources: [entry], hierarchies: [hierarchy, hierarchy] }))
-      .toThrow(expect.objectContaining({ code: "CONFLICT" }));
-    expect(() => planQuery({ ...base, dimensions: ["time"], rollups }, { sources: [entry], hierarchies: [hierarchy] }))
-      .toThrow(expect.objectContaining({ code: "INCOMPATIBLE" }));
+    expect(() =>
+      planQuery(
+        { ...base, rollups },
+        { sources: [entry], hierarchies: [hierarchy, hierarchy] },
+      ),
+    ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+    expect(() =>
+      planQuery(
+        { ...base, dimensions: ["time"], rollups },
+        { sources: [entry], hierarchies: [hierarchy] },
+      ),
+    ).toThrow(expect.objectContaining({ code: "INCOMPATIBLE" }));
     const otherHierarchy = { ...hierarchy, key: "other" };
-    expect(() => planQuery({
-      ...base,
-      rollups: [...rollups, { ...rollups[0], hierarchyKey: "other" }],
-    }, { sources: [entry], hierarchies: [hierarchy, otherHierarchy] }))
-      .toThrow(expect.objectContaining({ code: "DUPLICATE" }));
+    expect(() =>
+      planQuery(
+        {
+          ...base,
+          rollups: [...rollups, { ...rollups[0], hierarchyKey: "other" }],
+        },
+        { sources: [entry], hierarchies: [hierarchy, otherHierarchy] },
+      ),
+    ).toThrow(expect.objectContaining({ code: "DUPLICATE" }));
   });
 
   it("distinguishes missing measure, incompatible grain and ambiguous providers", () => {
-    expect(() => plan({ ...base, measures: ["missing"] }))
-      .toThrow(expect.objectContaining({ code: "UNRESOLVED" }));
-    expect(() => plan({ ...base, dimensions: ["missing"] }))
-      .toThrow(expect.objectContaining({ code: "INCOMPATIBLE" }));
-    expect(() => plan(base, [population, source("population", populationRows, "alternative")]))
-      .toThrow(expect.objectContaining({ code: "CONFLICT" }));
-    expect(() => plan({ ...base, join: "left", joinAnchor: "gdp" }))
-      .toThrow(expect.objectContaining({ code: "INVALID" }));
-    expect(() => plan({ ...base, join: "full" }))
-      .toThrow(expect.objectContaining({ code: "INCOMPATIBLE" }));
+    expect(() => plan({ ...base, measures: ["missing"] })).toThrow(
+      expect.objectContaining({ code: "UNRESOLVED" }),
+    );
+    expect(() => plan({ ...base, dimensions: ["missing"] })).toThrow(
+      expect.objectContaining({ code: "INCOMPATIBLE" }),
+    );
+    expect(() =>
+      plan(base, [
+        population,
+        source("population", populationRows, "alternative"),
+      ]),
+    ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+    expect(() => plan({ ...base, join: "left", joinAnchor: "gdp" })).toThrow(
+      expect.objectContaining({ code: "INVALID" }),
+    );
+    expect(() => plan({ ...base, join: "full" })).toThrow(
+      expect.objectContaining({ code: "INCOMPATIBLE" }),
+    );
   });
 
   it("supports constant arithmetic and rejects queries without a source measure", () => {
-    const constant = { ...ratio, expression: { kind: "constant", value: 7 } as const };
-    expect(() => plan({ ...ratioQuery, calculatedMeasures: [constant] }))
-      .toThrow(expect.objectContaining({ code: "UNRESOLVED" }));
+    const constant = {
+      ...ratio,
+      expression: { kind: "constant", value: 7 } as const,
+    };
+    expect(() =>
+      plan({ ...ratioQuery, calculatedMeasures: [constant] }),
+    ).toThrow(expect.objectContaining({ code: "UNRESOLVED" }));
     const result = run({
       ...base,
       measures: ["population", "ratio"],
       calculatedMeasures: [constant],
     });
-    expect(result.observations.map((row) => row.values.ratio?.value)).toEqual(Array(5).fill(7));
-    expect(result.observations[0].values.ratio).toEqual({ value: 7, inputs: [] });
+    expect(result.observations.map((row) => row.values.ratio?.value)).toEqual(
+      Array(5).fill(7),
+    );
+    expect(result.observations[0].values.ratio).toEqual({
+      value: 7,
+      inputs: [],
+    });
   });
 
   it("resolves all hidden predicate leaves, including negation and ranges", () => {
-    const result = run({
-      ...base,
-      measureFilter: {
-        kind: "and",
-        operands: [
-          { kind: "range", measureId: "gdp", min: 500, max: 900 },
-          { kind: "not", operand: { kind: "isNull", measureId: "population" } },
-          {
-            kind: "or",
-            operands: [
-              { kind: "compare", measureId: "gdp", operator: "gte", value: 600 },
-              { kind: "isAbsent", measureId: "gdp" },
-            ],
-          },
-        ],
+    const result = run(
+      {
+        ...base,
+        measureFilter: {
+          kind: "and",
+          operands: [
+            { kind: "range", measureId: "gdp", min: 500, max: 900 },
+            {
+              kind: "not",
+              operand: { kind: "isNull", measureId: "population" },
+            },
+            {
+              kind: "or",
+              operands: [
+                {
+                  kind: "compare",
+                  measureId: "gdp",
+                  operator: "gte",
+                  value: 600,
+                },
+                { kind: "isAbsent", measureId: "gdp" },
+              ],
+            },
+          ],
+        },
       },
-    }, [population, gdp]);
-    expect(result.observations.map((row) => row.values.population?.value).sort((a, b) => a! - b!)).toEqual([20, 30, 90]);
+      [population, gdp],
+    );
+    expect(
+      result.observations
+        .map((row) => row.values.population?.value)
+        .sort((a, b) => a! - b!),
+    ).toEqual([20, 30, 90]);
     expect(result.measures.map((m) => m.id)).toEqual(["population"]);
   });
 
   it("applies ranking to a hidden measure before projection", () => {
-    const result = run({
-      ...base,
-      topN: { measureId: "gdp", n: 1, direction: "asc", method: "ordinal", partitionBy: ["time"] },
-    }, [population, gdp]);
-    expect(result.observations.map((row) => row.values.population?.value)).toEqual([10, 20]);
-    expect(result.observations.every((row) => !Object.hasOwn(row.values, "gdp"))).toBe(true);
+    const result = run(
+      {
+        ...base,
+        topN: {
+          measureId: "gdp",
+          n: 1,
+          direction: "asc",
+          method: "ordinal",
+          partitionBy: ["time"],
+        },
+      },
+      [population, gdp],
+    );
+    expect(
+      result.observations.map((row) => row.values.population?.value),
+    ).toEqual([10, 20]);
+    expect(
+      result.observations.every((row) => !Object.hasOwn(row.values, "gdp")),
+    ).toBe(true);
   });
 
   it("preserves zero, null and absent calculated values through outer joins", () => {
@@ -682,9 +816,12 @@ describe("query edge cases and error contracts", () => {
     ]);
     const query: QuerySpec = { ...ratioQuery, join: "full" };
     const result = run(query, [denominator, numerator]);
-    const at = (id: string) => result.observations.find((row) =>
-      row.coordinate.members.some((m) => m.dimensionId === "space" && m.id === id),
-    )!;
+    const at = (id: string) =>
+      result.observations.find((row) =>
+        row.coordinate.members.some(
+          (m) => m.dimensionId === "space" && m.id === id,
+        ),
+      )!;
     expect(at("a").values.ratio?.value).toBeNull();
     expect(at("b").values.ratio?.value).toBe(0);
     expect(at("c").values.ratio?.value).toBeNull();
@@ -692,16 +829,36 @@ describe("query edge cases and error contracts", () => {
     expect(Object.hasOwn(at("e").values, "ratio")).toBe(false);
     expect(result.join).toBe("full");
     expect(result.definition).toEqual(ratio);
-    for (const [kind, expected] of [["isAbsent", 2], ["isNull", 2]] as const) {
-      expect(run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [denominator, numerator]).observations).toHaveLength(expected);
+    for (const [kind, expected] of [
+      ["isAbsent", 2],
+      ["isNull", 2],
+    ] as const) {
+      expect(
+        run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [
+          denominator,
+          numerator,
+        ]).observations,
+      ).toHaveLength(expected);
     }
-    expect(run({ ...query, topN: { measureId: "ratio", n: 10 } }, [denominator, numerator]).observations).toHaveLength(1);
+    expect(
+      run({ ...query, topN: { measureId: "ratio", n: 10 } }, [
+        denominator,
+        numerator,
+      ]).observations,
+    ).toHaveLength(1);
   });
 
   it("composes weighted averages through a hierarchy and dimension reduction", () => {
-    const average = source("population", populationRows, "population", "average");
+    const average = source(
+      "population",
+      populationRows,
+      "population",
+      "average",
+    );
     const result = run({ ...base, dimensions: ["space"], rollups }, [average]);
-    const east = result.observations.find((row) => row.coordinate.members[0].id === "east")!;
+    const east = result.observations.find(
+      (row) => row.coordinate.members[0].id === "east",
+    )!;
     expect(east.values.population).toMatchObject({
       value: 20,
       state: { sum: 60, count: 3 },
@@ -721,30 +878,56 @@ describe("query edge cases and error contracts", () => {
   it("rejects corrupted input coordinates, measure sets and values", () => {
     const row = population.observations[0];
     const coordinate = { members: [canonicalMember("space", "a")] };
-    const wrongAxis = { members: [canonicalMember("space", "a"), canonicalMember("other", "2020")] };
+    const wrongAxis = {
+      members: [
+        canonicalMember("space", "a"),
+        canonicalMember("other", "2020"),
+      ],
+    };
     const malformedRows = [
       { ...row, cellKey: "invalid" },
       { ...row, coordinate, cellKey: getCellKey(coordinate) },
       { ...row, coordinate: wrongAxis, cellKey: getCellKey(wrongAxis) },
       { ...row, values: {} },
       { ...row, values: { other: row.values.population } },
-      { ...row, values: { population: { ...row.values.population, value: Infinity } } },
-      { ...row, values: { population: { ...row.values.population, provenance: undefined } } },
+      {
+        ...row,
+        values: { population: { ...row.values.population, value: Infinity } },
+      },
+      {
+        ...row,
+        values: {
+          population: { ...row.values.population, provenance: undefined },
+        },
+      },
     ];
     for (const malformed of malformedRows) {
-      expect(() => run(base, [{ ...population, observations: [malformed as typeof row] }]))
-        .toThrow(UdcError);
+      expect(() =>
+        run(base, [{ ...population, observations: [malformed as typeof row] }]),
+      ).toThrow(UdcError);
     }
   });
 
   it("rejects malformed plans and over-budget execution inputs", () => {
     const p = plan(base);
-    expect(() => executeQuery({ ...p, version: 2 } as unknown as typeof p, { cubes: [population] }))
-      .toThrow(expect.objectContaining({ code: "INVALID" }));
-    expect(() => executeQuery(p, { cubes: [population, gdp, source("third")] }))
-      .toThrow(expect.objectContaining({ code: "LIMIT" }));
-    expect(() => executeQuery(p, { cubes: [{ ...population, observations: Array(10001).fill(population.observations[0]) }] }))
-      .toThrow(expect.objectContaining({ code: "LIMIT" }));
+    expect(() =>
+      executeQuery({ ...p, version: 2 } as unknown as typeof p, {
+        cubes: [population],
+      }),
+    ).toThrow(expect.objectContaining({ code: "INVALID" }));
+    expect(() =>
+      executeQuery(p, { cubes: [population, gdp, source("third")] }),
+    ).toThrow(expect.objectContaining({ code: "LIMIT" }));
+    expect(() =>
+      executeQuery(p, {
+        cubes: [
+          {
+            ...population,
+            observations: Array(10001).fill(population.observations[0]),
+          },
+        ],
+      }),
+    ).toThrow(expect.objectContaining({ code: "LIMIT" }));
   });
 
   it("detaches plan metadata from mutable input objects", () => {
@@ -755,6 +938,8 @@ describe("query edge cases and error contracts", () => {
     entry.snapshot.revision = "v2";
     expect(p.query.measures).toEqual(["population"]);
     expect(p.sources[0].source.snapshot.revision).toBe("v1");
-    expect(executeQuery(p, { cubes: [population] }).observations).toHaveLength(5);
+    expect(executeQuery(p, { cubes: [population] }).observations).toHaveLength(
+      5,
+    );
   });
 });
