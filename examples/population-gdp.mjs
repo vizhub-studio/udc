@@ -6,12 +6,10 @@ import {
   codedRef,
   canonicalMember,
   canonicalizeCube,
-  integrateCubes,
-  sliceCube,
-  calculateMeasure,
-  filterCube,
-  rankCube,
-  topNCube,
+  describeQuerySource,
+  validateQuery,
+  planQuery,
+  executeQuery,
 } from "../dist/index.js";
 
 const read = (file) =>
@@ -95,48 +93,71 @@ const toCanonical = (rows, schema, id) =>
     createCube(rows, schema, { datasetId: id, revision: "2014" }),
     concordance,
   );
-const joined = integrateCubes(
+const cubes = [
   toCanonical(population, popSchema, "un-population"),
   toCanonical(gdp, gdpSchema, "world-bank-gdp"),
-);
-const sliced = sliceCube(joined, canonicalMember("year", "year:1960"));
+];
+const catalog = { sources: cubes.map(describeQuerySource) };
+const query = (spec) => {
+  validateQuery(spec);
+  const plan = planQuery(spec, catalog);
+  const selected = cubes.filter((cube) =>
+    plan.sources.some((source) => source.source.snapshot.datasetId === cube.snapshots[0].datasetId),
+  );
+  return executeQuery(plan, { cubes: selected });
+};
+const queryDimensions = ["country", "year"];
+const filters = [{ dimensionId: "year", memberIds: ["year:1960"] }];
+const countryOf = (row) =>
+  row.coordinate.members.find((m) => m.dimensionId === "country")?.id;
+
+const joined = query({
+  version: 1,
+  dimensions: queryDimensions,
+  measures: ["population", "gdp-usd"],
+  filters,
+});
 console.log(
-  sliced.observations.map((row) => ({
-    country: row.coordinate.members.find((m) => m.dimensionId === "country")
-      ?.id,
+  joined.observations.map((row) => ({
+    country: countryOf(row),
     population: row.values.population.value,
     gdp: row.values["gdp-usd"].value,
   })),
 );
 
-const ratios = calculateMeasure(sliced, {
-  id: "gdp-per-capita",
-  name: "GDP per capita",
-  unit: "USD/person",
-  expression: {
-    kind: "binary",
-    operator: "/",
-    left: { kind: "measure", measureId: "gdp-usd" },
-    right: { kind: "measure", measureId: "population" },
+const top = query({
+  version: 1,
+  dimensions: queryDimensions,
+  measures: ["gdp-per-capita"],
+  filters,
+  calculatedMeasures: [{
+    id: "gdp-per-capita",
+    name: "GDP per capita",
+    unit: "USD/person",
+    expression: {
+      kind: "binary",
+      operator: "/",
+      left: { kind: "measure", measureId: "gdp-usd" },
+      right: { kind: "measure", measureId: "population" },
+    },
+  }],
+  measureFilter: {
+    kind: "compare",
+    measureId: "population",
+    operator: "gte",
+    value: 1000000,
+  },
+  topN: {
+    measureId: "gdp-per-capita",
+    direction: "desc",
+    n: 10,
+    ties: "include",
   },
 });
-const eligible = filterCube(ratios, {
-  kind: "compare",
-  measureId: "population",
-  operator: "gte",
-  value: 1000000,
-});
-const options = { measureId: "gdp-per-capita", direction: "desc" };
-const top = topNCube(eligible, { ...options, n: 10, ties: "include" });
-const ranks = new Map(
-  rankCube(eligible, options).map((row) => [row.cellKey, row.rank]),
-);
 console.log("Top observed GDP per capita in 1960 (population >= 1 million)");
 console.log(
   top.observations.map((row) => ({
-    country: row.coordinate.members.find((m) => m.dimensionId === "country")
-      ?.id,
-    rank: ranks.get(row.cellKey),
+    country: countryOf(row),
     gdpPerCapita: row.values["gdp-per-capita"].value,
   })),
 );
