@@ -25,6 +25,9 @@ for (const name of [
   "aggregateCube",
   "AggregatedCube",
   "AggregatedObservation",
+  "QuerySpec",
+  "QueryPlan",
+  "QueryResult",
 ]) {
   assert.match(
     declarations,
@@ -41,6 +44,10 @@ for (const name of [
   "integrateCubes",
   "sliceCube",
   "getCellKey",
+  "validateQuery",
+  "describeQuerySource",
+  "planQuery",
+  "executeQuery",
   "aggregateCube",
 ]) {
   assert.equal(typeof mod[name], "function", name + " must be exported");
