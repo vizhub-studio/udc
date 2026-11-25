@@ -7,7 +7,12 @@ arithmetic. The host supplies an authorized semantic catalog and immutable
 canonical source cubes.
 
 ```ts
-import { describeQuerySource, validateQuery, planQuery, executeQuery } from "@vizhub/udc";
+import {
+  describeQuerySource,
+  validateQuery,
+  planQuery,
+  executeQuery,
+} from "@vizhub/udc";
 
 // gdp and population are revision-pinned CanonicalCubes from the host.
 const query = {
@@ -15,17 +20,19 @@ const query = {
   dimensions: ["space", "time"],
   measures: ["gdp-per-capita"],
   filters: [{ dimensionId: "time", memberIds: ["2020", "2021"] }],
-  calculatedMeasures: [{
-    id: "gdp-per-capita",
-    name: "GDP per capita",
-    unit: "USD/person",
-    expression: {
-      kind: "binary",
-      operator: "/",
-      left: { kind: "measure", measureId: "gdp" },
-      right: { kind: "measure", measureId: "population" },
+  calculatedMeasures: [
+    {
+      id: "gdp-per-capita",
+      name: "GDP per capita",
+      unit: "USD/person",
+      expression: {
+        kind: "binary",
+        operator: "/",
+        left: { kind: "measure", measureId: "gdp" },
+        right: { kind: "measure", measureId: "population" },
+      },
     },
-  }],
+  ],
   topN: { measureId: "gdp-per-capita", n: 10, partitionBy: ["time"] },
 } as const;
 validateQuery(query);
@@ -44,18 +51,18 @@ cube. Each source must have one dataset snapshot with an immutable revision.
 
 ## Query properties
 
-| Field | Meaning |
-| --- | --- |
-| version | Required literal 1 |
-| dimensions | Retained axes, in output order; [] requests scalar grain |
-| measures | Nonempty requested output measures, in output order |
-| filters | Existing DiceSelection objects: OR within axis, AND across axes, before integration |
-| rollups | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis |
+| Field              | Meaning                                                                                   |
+| ------------------ | ----------------------------------------------------------------------------------------- |
+| version            | Required literal 1                                                                        |
+| dimensions         | Retained axes, in output order; [] requests scalar grain                                  |
+| measures           | Nonempty requested output measures, in output order                                       |
+| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration       |
+| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis        |
 | calculatedMeasures | Zero or one existing CalculatedMeasureDefinition, evaluated after rollups and aggregation |
-| measureFilter | Existing structured MeasurePredicate evaluated at final grain |
-| join | inner (default), full, left or right |
-| joinAnchor | Required for left/right; semantic required measure ID identifying the preserved source |
-| topN | Existing TopNOptions, partitioned on retained axes |
+| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                             |
+| join               | inner (default), full, left or right                                                      |
+| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source    |
+| topN               | Existing TopNOptions, partitioned on retained axes                                        |
 
 All identifiers are canonical semantic IDs. Dimension ranges are not inferred
 from IDs; enumerate canonical members explicitly. Numeric comparisons, ranges,
