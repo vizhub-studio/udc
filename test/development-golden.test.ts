@@ -622,10 +622,13 @@ describe("declarative drill-down", () => {
       );
       expect(index).toBeGreaterThanOrEqual(0);
       for (const id of ["population", "gdp"] as const) {
-        expect(row.values[id]?.value).toBe(Number(stateRows[index][id]));
-        expect(row.values[id]?.contributors.map((c) => c.sourceRow)).toEqual([
-          index + 1,
-        ]);
+        const value = row.values[id]!;
+        expect(value.value).toBe(Number(stateRows[index][id]));
+        expect("contributors" in value).toBe(true);
+        if ("contributors" in value)
+          expect(value.contributors.map((c) => c.sourceRow)).toEqual([
+            index + 1,
+          ]);
       }
     }
     expect(new Set(result.observations.map((row) => row.cellKey)).size).toBe(
@@ -679,7 +682,9 @@ describe("declarative drill-down", () => {
       expect(row.values.capacity?.value).toBe(
         Math.max(...raw.map((r) => Number(r.capacity))),
       );
-      expect(row.values.capacity?.contributors).toHaveLength(2);
+      const value = row.values.capacity!;
+      expect("contributors" in value).toBe(true);
+      if ("contributors" in value) expect(value.contributors).toHaveLength(2);
     }
   });
 
@@ -714,8 +719,14 @@ describe("declarative drill-down", () => {
     const invalidQueries = [
       { ...query, drilldown: { ...query.drilldown!, parentMemberId: "" } },
       { ...query, drilldown: { ...query.drilldown!, unknown: true } },
-      { ...query, drilldown: { ...query.drilldown!, parentMemberId: "unknown" } },
-      { ...query, drilldown: { ...query.drilldown!, parentMemberId: "state:NY" } },
+      {
+        ...query,
+        drilldown: { ...query.drilldown!, parentMemberId: "unknown" },
+      },
+      {
+        ...query,
+        drilldown: { ...query.drilldown!, parentMemberId: "state:NY" },
+      },
       { ...query, drilldown: { ...query.drilldown!, revision: "stale" } },
       { ...query, dimensions: ["year"] },
       {
@@ -754,9 +765,7 @@ describe("declarative drill-down", () => {
 
   it("rejects parent-level data rather than inverting national totals", async () => {
     const national = countryCubes();
-    await expect(
-      run(query, national),
-    ).rejects.toThrow(UdcError);
+    await expect(run(query, national)).rejects.toThrow(UdcError);
   });
 
   it("retains safe filter/project pushdown without aggregate pushdown", async () => {
