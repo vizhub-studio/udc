@@ -1783,7 +1783,10 @@ describe("composable calculated measures", () => {
     const final = def("final", binary("+", ref("diamond"), ref("extra")));
     const q = { ...query, measures: ["final", "ratio"], calculatedMeasures: [final, ...query.calculatedMeasures!] };
     const result = await run(q, [extra, population, gdp]);
-    const row = result.observations.find((r) => r.values.ratio?.value === 10)!;
+    const row = result.observations.find((r) =>
+      r.coordinate.members.some((m) => m.id === "a") &&
+      r.coordinate.members.some((m) => m.id === "2020"),
+    )!;
     expect(row.values.final?.value).toBe(43);
     expect(Object.keys(row.values)).toEqual(["final", "ratio"]);
     expect(result.definitions?.map((d) => d.id)).toEqual(["ratio", "plus", "twice", "diamond", "final"]);
@@ -1896,4 +1899,55 @@ describe("composable calculated measures", () => {
     provider.pushdown!.load = (request) => request.source.snapshot.datasetId === "gdp" ? Promise.resolve({kind:"unsupported"}) : original(request);
     expect(await executeQuery(plan(q,cubes), {provider})).toEqual(await run(q,cubes));
   });
+  it("rejects arithmetic overflow in a downstream calculation", () => {
+    const huge = def("huge", constant(1e308));
+    const overflow = def("overflow", binary("*", ref("huge"), constant(1e308)));
+    expect(() => calculateMeasures(population, [overflow, huge])).toThrow(
+      expect.objectContaining({ code: "LIMIT" }),
+    );
+  });
+  it("rejects contributor expansion before it can exceed the shared budget", () => {
+    const grouped = aggregateCube(population, []);
+    const original = grouped.observations[0];
+    const originalValue = original.values.population;
+    const contributors = Array.from(
+      { length: 20_001 },
+      (_, i) => ({ ...originalValue.contributors[0], sourceRow: i + 1 }),
+    );
+    const wide = {
+      ...grouped,
+      observations: [{
+        ...original,
+        values: {
+          population: { ...originalValue, contributors },
+        },
+      }],
+    };
+    const definitions = Array.from(
+      { length: 50 },
+      (_, i) => def("wide" + i, ref("population")),
+    );
+    expect(() => calculateMeasures(wide, definitions)).toThrow(
+      expect.objectContaining({ code: "LIMIT" }),
+    );
+  });
+  it("matches source-side aggregation for chained derived ratios", async () => {
+    const first = def("first", binary("/", ref("population"), constant(2)));
+    const second = def("second", binary("+", ref("first"), constant(1)));
+    const q: QuerySpec = {
+      ...base,
+      dimensions: [],
+      measures: ["second"],
+      calculatedMeasures: [second, first],
+    };
+    const requests: SourcePushdownRequest[] = [];
+    const provider = pushdownProvider(
+      [population],
+      { filter: true, project: true, aggregate: true },
+      requests,
+    );
+    expect(await executeQuery(plan(q), { provider })).toEqual(await run(q));
+    expect(requests[0].pushdown.aggregateDimensions).toEqual([]);
+  });
+
 });

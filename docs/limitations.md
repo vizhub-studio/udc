@@ -14,6 +14,10 @@ The imported `UDC_LIMITS` are deliberately conservative:
 | Rows per source cube                   |  10,000 |
 | Columns per source                     |     100 |
 | Output observations                    |  10,000 |
+| Calculated measure definitions         |     100 |
+| Cumulative calculation expression nodes |   1,000 |
+| Row-expression node operations         | 10,000,000 |
+| Calculation contributor entries        | 1,000,000 |
 | Projected datasets per coverage query  |   1,000 |
 | Projected coordinate contributions     | 100,000 |
 | Coverage summary coordinates           |  20,000 |
