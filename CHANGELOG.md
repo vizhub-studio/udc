@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased — composable calculated measures
+
+- Resolve multiple structured calculated measures, including hidden intermediates, forward references and acyclic dependencies.
+- Evaluate in deterministic dependency order after aggregation, with transitive source-row provenance and explicit sparse/null semantics.
+- Preserve single-calculation APIs and metadata; expose ordered definitions for multi-calculation results.
+- Bound total expression complexity, intermediate columns, evaluation work and contributor expansion; add graph, randomized reference, OLAP and provider parity regression tests. No production dependencies or publication.
+
 ## Unreleased — N-way semantic integration
 
 - Resolve multiple revision-pinned sources and integrate at identical canonical grain with inner, full and anchored directional joins.

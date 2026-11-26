@@ -231,7 +231,7 @@ step 5:
 Arithmetic is a structured expression tree, never an executable string. The
 planner discovers the hidden GDP and population operands even though the output
 contains only GDP per capita. Their source provenance remains available.
-Derived measures are evaluated after aggregation, so a regional ratio is the
+Calculated measures can reference other calculated measures by ID, including forward references. UDC resolves the dependency graph, rejects cycles and evaluates each definition once per observation in deterministic dependency order. Intermediate definitions may be omitted from the output. Derived measures are evaluated after aggregation, so a regional ratio is the
 ratio of totals, not an unweighted average of country ratios. Null operands
 or division by zero yield null; absent operands in sparse data remain absent.
 
@@ -274,9 +274,9 @@ incompatible grains, invalid expressions and stale plans fail with typed errors
 rather than being guessed or silently corrected.
 
 The v1 query API supports multiple selected source cubes at identical canonical
-grain and one calculated measure. Source, measure, cumulative input and output
+grain and multiple composable calculated measures. Source, measure, cumulative input and output
 budgets apply. It does not load data, authorize access, convert units, infer hierarchy
-relationships or support sorting by hidden fields and chained calculations. The host
+relationships or support sorting by hidden fields. The host
 must supply authorized, immutable inputs and compatible units. Drill-down and
 coverage queries remain available through the lower-level operators.
 

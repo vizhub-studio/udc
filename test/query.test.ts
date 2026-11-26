@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateCube,
   calculateMeasure,
+  calculateMeasures,
   canonicalMember,
   codedRef,
   createHierarchy,
@@ -1758,5 +1759,141 @@ describe("N-way federation", () => {
     ));
     const q: QuerySpec = { ...base, measures: cubes.map((cube) => cube.measures[0].id), join: "full", limit: 1 };
     await expect(run(q, cubes)).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
+  });
+});
+
+describe("composable calculated measures", () => {
+  const ref = (measureId: string) => ({ kind: "measure", measureId } as const);
+  const constant = (value: number) => ({ kind: "constant", value } as const);
+  const binary = (operator: "+" | "-" | "*" | "/", left: import("../src").MeasureExpression, right: import("../src").MeasureExpression) =>
+    ({ kind: "binary", operator, left, right } as const);
+  const def = (id: string, expression: import("../src").MeasureExpression) => ({
+    id, name: id, unit: "units", expression,
+  });
+  const twice = def("twice", binary("*", ref("ratio"), constant(2)));
+  const plus = def("plus", binary("+", ref("ratio"), constant(3)));
+  const diamond = def("diamond", binary("+", ref("twice"), ref("plus")));
+  const query: QuerySpec = {
+    ...ratioQuery,
+    measures: ["diamond"],
+    calculatedMeasures: [diamond, plus, twice, ratio],
+  };
+  it("resolves forward references, diamonds, hidden operands and three sources", async () => {
+    const extra = source("extra");
+    const final = def("final", binary("+", ref("diamond"), ref("extra")));
+    const q = { ...query, measures: ["final", "ratio"], calculatedMeasures: [final, ...query.calculatedMeasures!] };
+    const result = await run(q, [extra, population, gdp]);
+    const row = result.observations.find((r) => r.values.ratio?.value === 10)!;
+    expect(row.values.final?.value).toBe(43);
+    expect(Object.keys(row.values)).toEqual(["final", "ratio"]);
+    expect(result.definitions?.map((d) => d.id)).toEqual(["ratio", "plus", "twice", "diamond", "final"]);
+    expect(result.definition).toBeUndefined();
+    const value = row.values.final!;
+    expect("inputs" in value && value.inputs.map((i) => [i.measureId, i.contributors.map((p) => p.measureId).sort()])).toEqual([
+      ["diamond", ["gdp", "population"]],
+      ["extra", ["extra"]],
+    ]);
+    expect(await run({ ...q, calculatedMeasures: [...q.calculatedMeasures].reverse() }, [gdp, extra, population])).toEqual(result);
+  });
+  it("aggregates before evaluating and supports filter, rank, and order on derived measures", async () => {
+    const result = await run({
+      ...query,
+      dimensions: ["time"],
+      filters,
+      measureFilter: { kind: "compare", measureId: "twice", operator: "gt", value: 0 },
+      topN: { measureId: "diamond", n: 1 },
+      orderBy: [{ kind: "measure", measureId: "diamond", direction: "desc" }],
+    }, [population, gdp]);
+    expect(result.observations).toHaveLength(1);
+    expect(result.observations[0].values.diamond?.value).toBeCloseTo(3 * (1600 / 130) + 3);
+  });
+  it("handles hierarchy rollup and independent calculated measures", async () => {
+    const independent = def("independent", binary("+", ref("population"), constant(1)));
+    const result = await run({
+      ...query, rollups, filters,
+      measures: ["diamond", "independent"],
+      calculatedMeasures: [independent, ...query.calculatedMeasures!],
+    }, [population, gdp]);
+    const east = result.observations.find((r) => r.coordinate.members.some((m) => m.id === "east"))!;
+    expect(east.values.diamond?.value).toBeCloseTo(55.5);
+    expect(east.values.independent?.value).toBe(41);
+  });
+  it("preserves sparse absence, explicit null and division by zero transitively", async () => {
+    const pop = source("population", [["a","2020",0], ["b","2020",null], ["c","2020",2]]);
+    const money = source("gdp", [["a","2020",5], ["b","2020",5], ["d","2020",5]]);
+    const result = await run({ ...query, join: "full" }, [pop,money]);
+    const at = (id: string) => result.observations.find((r) => r.coordinate.members.some((m) => m.id === id))!;
+    expect(at("a").values.diamond?.value).toBeNull();
+    expect(at("b").values.diamond?.value).toBeNull();
+    expect(Object.hasOwn(at("c").values, "diamond")).toBe(false);
+    expect(Object.hasOwn(at("d").values, "diamond")).toBe(false);
+    expect(at("c").presence).toBeDefined();
+  });
+  it.each([
+    [def("x", ref("y")), def("y", ref("x"))],
+    [def("x", ref("x"))],
+    [def("x", ref("missing"))],
+    [def("x", ref("population")), def("y", ref("population"))],
+    [def("x", ref("population")), def("x", ref("population"))],
+  ].map((definitions) => [definitions] as const))("rejects invalid dependency sets %#", (definitions) => {
+    expect(() => plan({ ...base, measures: ["x"], calculatedMeasures: definitions })).toThrow(UdcError);
+  });
+  it("rejects collisions with selected source and aggregate identities", () => {
+    expect(() => plan({ ...base, measures: ["population", "x"], calculatedMeasures: [def("population", ref("x")), def("x", ref("population"))] })).toThrow(UdcError);
+    const counted = source("metric", populationRows, "counted", "count");
+    expect(() => plan({
+      ...base, dimensions: [], measures: ["x"],
+      calculatedMeasures: [def("x", ref("metric")), def("metric", ref("metric:count"))],
+    }, [counted])).toThrow(expect.objectContaining({code:"CONFLICT"}));
+  });
+  it("enforces cumulative expression and intermediate column budgets", () => {
+    const tree = (depth: number): import("../src").MeasureExpression => depth ? binary("+", tree(depth-1), tree(depth-1)) : ref("population");
+    const many = Array.from({length: 20}, (_, i) => def("m"+i, tree(5)));
+    expect(() => validateQuery({ ...base, measures: many.map((d) => d.id), calculatedMeasures: many })).toThrow(expect.objectContaining({code:"LIMIT"}));
+    const wide = Array.from({length: 100}, (_, i) => def("m"+i, ref("population")));
+    expect(() => plan({ ...base, measures: wide.map((d) => d.id), calculatedMeasures: wide })).toThrow(expect.objectContaining({code:"LIMIT"}));
+  });
+  it("bounds shared lineage through deep diamonds and keeps the low-level terminal barrier", () => {
+    const definitions = [def("m0", ref("population"))];
+    for (let i=1;i<40;i++) definitions.push(def("m"+i, binary("+", ref("m"+(i-1)), ref("m"+Math.max(0,i-2)))));
+    const calculated = calculateMeasures(population, [...definitions].reverse());
+    const last = calculated.observations[0].values.m39!;
+    expect("inputs" in last && last.inputs.every((i) => i.contributors.length === 1)).toBe(true);
+    expect(() => calculateMeasure(calculated as unknown as CanonicalCube, twice)).toThrow(UdcError);
+    expect(calculateMeasures(population, [definitions[0]])).toEqual(calculateMeasure(population, definitions[0]));
+  });
+  it("matches a seeded independent reference evaluator for shuffled arithmetic DAGs", async () => {
+    let seed = 123456789;
+    const rand = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0);
+    for (let trial=0;trial<24;trial++) {
+      const definitions = [];
+      const expected = [10];
+      for (let i=1;i<=12;i++) {
+        const left = rand()%i;
+        const right = rand()%i;
+        const op = rand()%2 ? "+" : "-";
+        definitions.push(def("m"+i, binary(op, ref(left ? "m"+left : "population"), ref(right ? "m"+right : "population"))));
+        expected.push(op === "+" ? expected[left]+expected[right] : expected[left]-expected[right]);
+      }
+      const shuffled = [...definitions];
+      for (let i=shuffled.length-1;i>0;i--) {
+        const j=rand()%(i+1);
+        [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+      }
+      const result = await run({...base, measures: definitions.map(d=>d.id), calculatedMeasures: shuffled});
+      const row = result.observations.find(r=>r.coordinate.members.some(m=>m.id==="a") && r.coordinate.members.some(m=>m.id==="2020"))!;
+      expect(definitions.map(d=>row.values[d.id]?.value)).toEqual(expected.slice(1));
+    }
+  });
+  it("keeps chained calculations identical under provider pushdown and mixed fallback", async () => {
+    const cubes = [population,gdp];
+    const requests: SourcePushdownRequest[] = [];
+    const provider = pushdownProvider(cubes, { filter: true, project: true }, requests);
+    const q = { ...query, filters };
+    expect(await executeQuery(plan(q,cubes), {provider})).toEqual(await run(q,cubes));
+    expect(requests.length).toBeGreaterThan(0);
+    const original = provider.pushdown!.load.bind(provider.pushdown);
+    provider.pushdown!.load = (request) => request.source.snapshot.datasetId === "gdp" ? Promise.resolve({kind:"unsupported"}) : original(request);
+    expect(await executeQuery(plan(q,cubes), {provider})).toEqual(await run(q,cubes));
   });
 });

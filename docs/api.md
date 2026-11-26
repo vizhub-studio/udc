@@ -54,7 +54,7 @@ hierarchy editor, or cube aggregation operation.
 
 ## OLAP query operations
 
-The public exports `diceCube`, `rollupCube`, `calculateMeasure`, `DiceSelection`, `HierarchyRollupEvidence`, `MeasureExpression`, `CalculatedMeasureDefinition`, `CalculatedMeasureValue`, `CalculatedObservation`, and `CalculatedCube` are documented in [OLAP operations](olap.md). The calculated stage is deliberately distinct from canonical and aggregated stages.
+The public exports `diceCube`, `rollupCube`, `calculateMeasure`, `calculateMeasures`, `planCalculatedMeasures`, `DiceSelection`, `HierarchyRollupEvidence`, `MeasureExpression`, `CalculatedMeasureDefinition`, `CalculatedMeasureValue`, `CalculatedObservation`, and `CalculatedCube` are documented in [OLAP operations](olap.md). The calculated stage is deliberately distinct from canonical and aggregated stages.
 
 The advanced exports `drilldownCube`, `filterCube`, `rankCube`, `topNCube`, `AnalyticalCube`, `MeasurePredicate`, `RankOptions`, `RankedObservation`, `TopNOptions` and `NavigableHierarchy` are documented in [OLAP operations](olap.md). The return type of `createHierarchy` adds children and descendants navigation without changing the structural base `Hierarchy` interface.
 

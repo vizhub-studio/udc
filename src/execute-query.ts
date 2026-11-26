@@ -1,6 +1,6 @@
 import { aggregateCube } from "./aggregate-cube";
 import { integrateManyCubes } from "./integrate-cubes";
-import { calculateMeasure, diceCube, rollupCube } from "./olap";
+import { calculateMeasures, diceCube, rollupCube } from "./olap";
 import { filterCube, topNCube, type AnalyticalCube } from "./advanced-olap";
 import { getCellKey } from "./coordinate";
 import { assertBound, UDC_LIMITS, UdcError } from "./limits";
@@ -394,8 +394,8 @@ export async function executeQuery(
       throw new UdcError("INCOMPATIBLE", "Aggregation requires dense input");
     cube = aggregateCube(cube, query.dimensions);
   }
-  const calculation = query.calculatedMeasures?.[0];
-  if (calculation) cube = calculateMeasure(cube, calculation);
+  if (query.calculatedMeasures?.length)
+    cube = calculateMeasures(cube, query.calculatedMeasures);
   if (query.measureFilter) cube = filterCube(cube, query.measureFilter);
   if (query.topN) cube = topNCube(cube, query.topN);
   const measures = query.measures.map((id) => {
@@ -443,6 +443,10 @@ export async function executeQuery(
       ? { hierarchyRollups: cube.hierarchyRollups }
       : {}),
     ...("join" in cube ? { join: cube.join } : {}),
-    ...(cube.stage === "calculated" ? { definition: cube.definition } : {}),
+    ...(cube.stage === "calculated"
+      ? cube.definitions
+        ? { definitions: cube.definitions }
+        : { definition: cube.definition }
+      : {}),
   };
 }

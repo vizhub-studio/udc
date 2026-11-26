@@ -162,17 +162,29 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
     }
   }
   if (q.calculatedMeasures !== undefined) {
-    for (const item of arr(q.calculatedMeasures, 1, "calculated measures")) {
+    const seen = new Set<string>();
+    let totalNodes = 0;
+    for (const item of arr(
+      q.calculatedMeasures,
+      UDC_LIMITS.calculatedMeasures,
+      "calculated measures",
+    )) {
       const d = obj(
         item,
         ["id", "name", "unit", "expression"],
         "calculated measure",
       );
-      id(d.id);
+      const measureId = id(d.id);
+      if (seen.has(measureId))
+        throw new UdcError("DUPLICATE", "Duplicate calculated measure");
+      seen.add(measureId);
       id(d.unit);
       if (typeof d.name !== "string" || !d.name.trim() || d.name.length > 256)
         invalid("calculated measure name");
+      nodes = 0;
       expression(d.expression, 1);
+      totalNodes += nodes;
+      assertBound(totalNodes, UDC_LIMITS.calculationExpressionNodes, "calculation expression nodes");
     }
   }
   nodes = 0;
