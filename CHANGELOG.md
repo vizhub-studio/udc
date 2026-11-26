@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased — N-way semantic integration
+
+- Resolve multiple revision-pinned sources and integrate at identical canonical grain with inner, full and anchored directional joins.
+- Add `integrateManyCubes` and per-source sparse presence while preserving binary results and provenance.
+- Bound cumulative input rows and measure values, selected measures and output observations; retain source-local pushdown and prevent premature aggregation.
+- Add seeded reference-join, five-source OLAP, provider-parity, revision and resource-bound regression tests. No production dependencies or publication.
+
 ## 3.0.0 — asynchronous data providers (unreleased)
 
 - Breaking: `executeQuery` returns `Promise<QueryResult>` and accepts `{ provider, hierarchies? }` instead of `{ cubes, hierarchies? }`.

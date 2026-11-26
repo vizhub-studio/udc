@@ -148,7 +148,7 @@ export interface QueryResult {
     coordinate: QueryObservation["coordinate"];
     cellKey: string;
     values: Readonly<Partial<Record<string, QueryValue>>>;
-    presence?: { left: boolean; right: boolean };
+    presence?: import("./types").JoinPresence;
   }[];
   snapshots: AnalyticalCube["snapshots"];
   schemaRevisions: AnalyticalCube["schemaRevisions"];

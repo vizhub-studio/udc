@@ -207,20 +207,21 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   const aggregate = !same(grain, query.dimensions);
   const rollup = hierarchyAxes.size > 0;
   const join = query.join ?? "inner";
-  if (join !== "inner" && (planSources.length !== 2 || aggregate || rollup))
+  if (join !== "inner" && (planSources.length < 2 || aggregate || rollup))
     fail(
       "INCOMPATIBLE",
-      "Outer joins require two sources and unchanged dense grain (no rollups)",
+      "Outer joins require at least two sources and unchanged grain (no rollups)",
     );
   if (query.joinAnchor) {
     const anchor = providers.get(query.joinAnchor);
     const preserved = planSources.find(
       (s) => s.source.snapshot.datasetId === anchor,
     )!;
-    const other = planSources.find((s) => s !== preserved)!;
-    planSources = join === "left" ? [preserved, other] : [other, preserved];
+    const others = planSources.filter((s) => s !== preserved);
+    planSources = join === "left" ? [preserved, ...others] : [...others, preserved];
   }
   const rawIds = planSources.flatMap((s) => s.measureIds);
+  assertBound(rawIds.length, UDC_LIMITS.columns, "selected source measures");
   if (new Set(rawIds).size !== rawIds.length)
     fail("CONFLICT", "Duplicate source measure");
   if (calculation && rawIds.includes(calculation.id))

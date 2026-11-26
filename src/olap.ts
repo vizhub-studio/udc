@@ -204,7 +204,7 @@ export interface CalculatedObservation {
       >
     >
   >;
-  presence?: { left: boolean; right: boolean };
+  presence?: import("./types").JoinPresence;
 }
 /** Terminal calculation stage: never silently aggregate a derived ratio. */
 export interface CalculatedCube extends Omit<

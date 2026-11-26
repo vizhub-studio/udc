@@ -174,7 +174,9 @@ They are not pagination or a replacement for partitioned top-N.
    apply hierarchical rollups in query order, and aggregate away extra axes.
    Only shared coordinates contribute to inner joins; this is not a guarantee
    of complete coverage. Explicit left/right/full joins retain sparse absence
-   and cannot roll up or aggregate.
+   and cannot roll up or aggregate. N-way inner joins intersect all selected
+   coordinates, full joins union them, and directional joins retain exactly
+   the anchor source's coordinates.
 4. Calculate the derived measure at final grain, apply the measure predicate,
    select top/bottom N, apply explicit ordering, apply the global limit, and
    project the requested output. Missing and null values retain existing operator
@@ -191,10 +193,24 @@ guarantee immutability, authorization, compatible units, and approved
 concordances/hierarchies. Hierarchy revisions must identify immutable definitions.
 There is no implicit unit conversion or dimensional analysis.
 
+## N-way sparse presence
+
+Binary results retain the existing `presence.left` and `presence.right`.
+For three or more selected sources, each sparse observation also includes
+`presence.sources`, an ordered array of dataset IDs and Boolean presence.
+Dataset revisions remain pinned in the result snapshots. The existing flags
+summarize groups: left joins and full joins use first versus remaining sources;
+right joins use preceding sources versus the last (anchor) source. A group
+is present if any source in it is present. Use the per-source array for
+unambiguous N-way presence. Source order is deterministic by dataset ID,
+with the directional anchor moved to the preserved end.
+
 ## Initial limits and deliberate non-goals
 
-The existing UDC limits apply (including two selected source cubes, 10,000
-observations, bounded expression/predicate trees). One calculated measure per
+The existing UDC limits apply: at most 100 selected measures/sources, 10,000
+rows per source, 100,000 acquired input rows and 1,000,000 acquired measure
+values across sources, 10,000 output observations, and bounded expression and
+predicate trees. Provider-side work is still bounded by the host. One calculated measure per
 query; no chained calculations or arbitrary code. No implicit aggregation of
 sparse results, cross-grain joins, inferred source preferences, drill-down query
 syntax, independent rank metadata, sorting by hidden fields, dataset coverage queries,
