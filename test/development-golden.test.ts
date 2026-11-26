@@ -593,3 +593,216 @@ describe("development cube: US state drill-down", () => {
     }
   });
 });
+
+describe("declarative drill-down", () => {
+  const query: QuerySpec = {
+    version: 1,
+    dimensions: ["geo", "year"],
+    measures: ["population", "gdp"],
+    drilldown: {
+      hierarchyKey: hierarchy.key,
+      revision: hierarchy.revision,
+      parentMemberId: "usa",
+    },
+  };
+
+  it("plans and executes the 100 state-year rows with exact raw lineage", async () => {
+    const fine = stateCube();
+    const p = plan(query, [fine]);
+    expect(p.steps).toEqual(["drilldown", "project"]);
+    const result = await run(query, [fine]);
+    expect(result.inputStage).toBe("aggregated");
+    expect(result.observations).toHaveLength(100);
+    expect(result.hierarchyRollups).toHaveLength(1);
+    for (const row of result.observations) {
+      const index = stateRows.findIndex(
+        (raw) =>
+          "state:" + raw.geo === member(row, "geo") &&
+          raw.year === member(row, "year"),
+      );
+      expect(index).toBeGreaterThanOrEqual(0);
+      for (const id of ["population", "gdp"] as const) {
+        expect(row.values[id]?.value).toBe(Number(stateRows[index][id]));
+        expect(row.values[id]?.contributors.map((c) => c.sourceRow)).toEqual([
+          index + 1,
+        ]);
+      }
+    }
+    expect(new Set(result.observations.map((row) => row.cellKey)).size).toBe(
+      100,
+    );
+    for (const year of years) {
+      const rows = result.observations.filter(
+        (row) => member(row, "year") === year,
+      );
+      expect(rows).toHaveLength(50);
+      const national = expected.find(
+        (row) => row.geo === "usa" && row.year === year,
+      )!;
+      expect(
+        rows.reduce((sum, row) => sum + row.values.population!.value!, 0),
+      ).toBeCloseTo(national.pop, 3);
+      expect(
+        rows.reduce((sum, row) => sum + row.values.gdp!.value!, 0),
+      ).toBeCloseTo(national.gdp, 3);
+    }
+  });
+
+  it("calculates ratios after drill-down and subsequent dimensional reduction", async () => {
+    const q: QuerySpec = {
+      ...query,
+      dimensions: ["geo"],
+      measures: ["gdp-per-person", "capacity"],
+      calculatedMeasures: [
+        binary("gdp-per-person", "gdp", "population", "USD/person", "/"),
+      ],
+      aggregationOverrides: [{ measureId: "capacity", operator: "max" }],
+    };
+    const fine = stateCube();
+    expect(plan(q, [fine]).steps).toEqual([
+      "drilldown",
+      "aggregate",
+      "calculate",
+      "project",
+    ]);
+    const result = await run(q, [fine]);
+    expect(result.observations).toHaveLength(50);
+    for (const row of result.observations) {
+      const raw = stateRows.filter(
+        (r) => "state:" + r.geo === member(row, "geo"),
+      );
+      const sum = (id: "population" | "gdp") =>
+        raw.reduce((total, r) => total + Number(r[id]), 0);
+      expect(row.values["gdp-per-person"]?.value).toBeCloseTo(
+        sum("gdp") / sum("population"),
+      );
+      expect(row.values.capacity?.value).toBe(
+        Math.max(...raw.map((r) => Number(r.capacity))),
+      );
+      expect(row.values.capacity?.contributors).toHaveLength(2);
+    }
+  });
+
+  it("resolves count output identity through a hierarchy reduction", async () => {
+    const q: QuerySpec = {
+      ...query,
+      measures: ["population:count"],
+      aggregationOverrides: [{ measureId: "population", operator: "count" }],
+    };
+    const result = await run(q, [stateCube()]);
+    expect(result.observations).toHaveLength(100);
+    for (const row of result.observations)
+      expect(row.values["population:count"]?.value).toBe(1);
+  });
+
+  it("never fabricates missing members and preserves empty result semantics", async () => {
+    const missing = stateCube(stateRows.filter((row) => row.geo !== "NY"));
+    const result = await run(query, [missing]);
+    expect(result.observations).toHaveLength(98);
+    expect(result.observations.some((r) => member(r, "geo") === "state:NY")).toBe(
+      false,
+    );
+    const empty = await run(
+      { ...query, filters: [{ dimensionId: "year", memberIds: [] }] },
+      [missing],
+    );
+    expect(empty.observations).toEqual([]);
+  });
+
+  it("rejects invalid requests and stale hierarchy metadata before loading", async () => {
+    const fine = stateCube();
+    const invalidQueries = [
+      { ...query, drilldown: { ...query.drilldown!, parentMemberId: "" } },
+      { ...query, drilldown: { ...query.drilldown!, unknown: true } },
+      { ...query, drilldown: { ...query.drilldown!, parentMemberId: "unknown" } },
+      { ...query, drilldown: { ...query.drilldown!, parentMemberId: "state:NY" } },
+      { ...query, drilldown: { ...query.drilldown!, revision: "stale" } },
+      { ...query, dimensions: ["year"] },
+      {
+        ...query,
+        filters: [{ dimensionId: "geo", memberIds: ["usa"] }],
+      },
+      {
+        ...query,
+        rollups: [
+          {
+            hierarchyKey: hierarchy.key,
+            revision: hierarchy.revision,
+            targetMembers: ["usa"],
+          },
+        ],
+      },
+      { ...query, join: "full" as const },
+    ];
+    for (const q of invalidQueries)
+      expect(() => plan(q, [fine])).toThrow(UdcError);
+    const p = plan(query, [fine]);
+    const provider: DataProvider = {
+      ...createInMemoryProvider([fine]),
+      async loadSource() {
+        throw Error("Stale plan must fail before acquisition");
+      },
+    };
+    await expect(executeQuery(p, { provider })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(
+        { ...p, steps: ["project"] },
+        { provider, hierarchies: [hierarchy] },
+      ),
+    ).rejects.toThrow(UdcError);
+  });
+
+  it("rejects parent-level data rather than inverting national totals", async () => {
+    const national = countryCubes();
+    await expect(
+      run(query, national),
+    ).rejects.toThrow(UdcError);
+  });
+
+  it("retains safe filter/project pushdown without aggregate pushdown", async () => {
+    const fine = stateCube();
+    const q: QuerySpec = {
+      ...query,
+      dimensions: ["geo"],
+      filters: [{ dimensionId: "year", memberIds: ["2010"] }],
+    };
+    const p = plan(q, [fine]);
+    let calls = 0;
+    const provider: DataProvider = {
+      ...createInMemoryProvider([fine]),
+      async loadSource() {
+        throw Error("Unexpected fallback");
+      },
+      pushdown: {
+        capabilities: () => ({ filter: true, project: true, aggregate: true }),
+        async load(request) {
+          calls++;
+          expect(request.pushdown.aggregateDimensions).toBeUndefined();
+          const ids = request.pushdown.measureIds;
+          expect(ids).toEqual(["gdp", "population"]);
+          return {
+            kind: "subset",
+            cube: {
+              ...fine,
+              measures: fine.measures.filter((m) => ids.includes(m.id)),
+              observations: fine.observations
+                .filter((row) => member(row, "year") === "2010")
+                .map((row) => ({
+                  ...row,
+                  values: Object.fromEntries(
+                    Object.entries(row.values).filter(([id]) =>
+                      ids.includes(id),
+                    ),
+                  ),
+                })),
+            },
+          };
+        },
+      },
+    };
+    expect(
+      await executeQuery(p, { provider, hierarchies: [hierarchy] }),
+    ).toEqual(await run(q, [fine]));
+    expect(calls).toBe(1);
+  });
+});
