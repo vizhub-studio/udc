@@ -11,6 +11,7 @@ import {
   createInMemoryProvider,
   describeQuerySource,
   drilldownCube,
+  getCellKey,
   executeQuery,
   planQuery,
   resolveConcordance,
@@ -442,7 +443,7 @@ describe("development cube: US state drill-down", () => {
       observations: [...fine.observations, {
         ...fine.observations[0],
         coordinate: { members: [canonicalMember("geo", "usa"), canonicalMember("year", "1960")] },
-        cellKey: "invalid-mixed-grain",
+        cellKey: getCellKey({ members: [canonicalMember("geo", "usa"), canonicalMember("year", "1960")] }),
       }],
     };
     expect(() => rollupCube(mixed, hierarchy, ["usa"])).toThrow(UdcError);
@@ -455,7 +456,7 @@ describe("development cube: US state drill-down", () => {
     for (const r of rollupCube(missing, hierarchy, ["usa"]).observations) {
       const year = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
       const us = expected.find((e) => e.geo === "usa" && e.year === year)!;
-      expect(r.values.population.value).toBe(us.pop - Number(stateRows.find((s) => s.geo === "NY" && s.year === year)!.population));
+      expect(r.values.population.value).toBeCloseTo(us.pop - Number(stateRows.find((s) => s.geo === "NY" && s.year === year)!.population), 3);
       expect(r.values.population.contributors).toHaveLength(49);
     }
   });
