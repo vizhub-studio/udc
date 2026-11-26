@@ -110,20 +110,20 @@ The provider and hierarchy inputs must remain immutable during execution.
 
 ## Query properties
 
-| Field              | Meaning                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| version            | Required literal 1                                                                        |
-| dimensions         | Retained axes, in output order; [] requests scalar grain                                  |
-| measures           | Nonempty requested output measures, in output order                                       |
-| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration       |
-| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis        |
-| calculatedMeasures | Zero or one existing CalculatedMeasureDefinition, evaluated after rollups and aggregation |
-| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                             |
-| join               | inner (default), full, left or right                                                      |
-| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source    |
-| topN               | Existing TopNOptions, partitioned on retained axes                                        |
-| orderBy            | Ordered dimension or measure keys from the requested output                               |
-| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                  |
+| Field              | Meaning                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| version            | Required literal 1                                                                                       |
+| dimensions         | Retained axes, in output order; [] requests scalar grain                                                 |
+| measures           | Nonempty requested output measures, in output order                                                      |
+| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration                      |
+| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis                       |
+| calculatedMeasures | Multiple CalculatedMeasureDefinitions with acyclic dependencies, evaluated after rollups and aggregation |
+| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                                            |
+| join               | inner (default), full, left or right                                                                     |
+| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source                   |
+| topN               | Existing TopNOptions, partitioned on retained axes                                                       |
+| orderBy            | Ordered dimension or measure keys from the requested output                                              |
+| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                                 |
 
 All identifiers are canonical semantic IDs. Dimension ranges are not inferred
 from IDs; enumerate canonical members explicitly. Numeric comparisons, ranges,
@@ -210,10 +210,18 @@ with the directional anchor moved to the preserved end.
 The existing UDC limits apply: at most 100 selected measures/sources, 10,000
 rows per source, 100,000 acquired input rows and 1,000,000 acquired measure
 values across sources, 10,000 output observations, and bounded expression and
-predicate trees. Provider-side work is still bounded by the host. One calculated measure per
-query; no chained calculations or arbitrary code. No implicit aggregation of
+predicate trees. Provider-side work is still bounded by the host. Calculated measures
+support forward references and acyclic chains; no arbitrary code. At most 100 definitions,
+100 expression nodes per definition, 1,000 cumulative nodes, 10 million row-expression
+node operations, and one million retained calculation contributor entries are allowed.
+Base and calculated intermediate measures share the 100-column budget. Unused definitions,
+duplicate identities, cycles and unresolved operands fail closed. No implicit aggregation of
 sparse results, cross-grain joins, inferred source preferences, drill-down query
 syntax, independent rank metadata, sorting by hidden fields, dataset coverage queries,
 physical loading, authentication, HTTP/MCP endpoints, or application UI.
 Existing lower-level operators remain public for these workflows. No new
 production dependencies. This source change does not publish an npm version.
+
+### Composable calculated measures
+
+A measure expression can reference any declared calculated measure by ID, irrespective of declaration order. Requested output measures, measure predicates and ranking determine the roots; all intermediate dependencies must be reachable. The planner resolves only base operands against the source catalog. Calculations run once per row in deterministic topological order after rollups and aggregation and before measure predicates, ranking and projection. Missing operands remain absent and explicit nulls propagate. Each direct input retains transitive original source-row contributors, deduplicated across shared dependency paths within that input. Single-calculation results retain `definition`; multi-calculation results expose `definitions` in evaluation order. Query syntax remains version 1.

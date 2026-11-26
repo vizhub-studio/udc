@@ -213,14 +213,111 @@ export interface CalculatedCube extends Omit<
 > {
   stage: "calculated";
   inputStage: QueryCube["stage"];
+  /** Last evaluated definition; retained for compatibility with single calculations. */
   definition: CalculatedMeasureDefinition;
+  /** All definitions in evaluation order, present for multiple calculations. */
+  definitions?: readonly CalculatedMeasureDefinition[];
   observations: readonly CalculatedObservation[];
   join?: SparseIntegratedCube["join"];
+}
+
+/** Resolve a calculation DAG without loading observations. */
+export function planCalculatedMeasures(
+  definitions: readonly CalculatedMeasureDefinition[],
+  requested?: readonly string[],
+): {
+  order: CalculatedMeasureDefinition[];
+  baseRefs: Set<string>;
+  references: Map<string, string[]>;
+  expressionNodes: number;
+} {
+  if (!Array.isArray(definitions))
+    throw new UdcError("INVALID", "Invalid calculated measures");
+  assertBound(
+    definitions.length,
+    UDC_LIMITS.calculatedMeasures,
+    "calculated measures",
+  );
+  const byId = new Map<string, CalculatedMeasureDefinition>();
+  const references = new Map<string, string[]>();
+  let expressionNodes = 0;
+  for (const definition of definitions) {
+    if (!definition || typeof definition !== "object")
+      throw new UdcError("INVALID", "Invalid calculated measure");
+    assertId(definition.id, "calculated measure");
+    assertId(definition.unit, "calculated unit");
+    if (typeof definition.name !== "string" || !definition.name.trim())
+      throw new UdcError("INVALID", "Missing calculated measure name");
+    if (byId.has(definition.id))
+      throw new UdcError("DUPLICATE", "Duplicate calculated measure");
+    byId.set(definition.id, definition);
+    const refs = new Set<string>();
+    let nodes = 0;
+    function validate(expr: MeasureExpression, depth: number): void {
+      assertBound(depth, 32, "expression depth");
+      assertBound(++nodes, 100, "expression nodes");
+      assertBound(
+        ++expressionNodes,
+        UDC_LIMITS.calculationExpressionNodes,
+        "calculation expression nodes",
+      );
+      if (!expr || typeof expr !== "object")
+        throw new UdcError("INVALID", "Invalid expression");
+      if (expr.kind === "constant") {
+        if (!Number.isFinite(expr.value))
+          throw new UdcError("INVALID", "Non-finite constant");
+      } else if (expr.kind === "measure") {
+        assertId(expr.measureId, "expression measure");
+        refs.add(expr.measureId);
+      } else if (
+        expr.kind === "binary" &&
+        ["+", "-", "*", "/"].includes(expr.operator)
+      ) {
+        validate(expr.left, depth + 1);
+        validate(expr.right, depth + 1);
+      } else {
+        throw new UdcError("INVALID", "Invalid expression operator");
+      }
+    }
+    validate(definition.expression, 1);
+    references.set(definition.id, [...refs].sort());
+  }
+  const order: CalculatedMeasureDefinition[] = [];
+  const active = new Set<string>();
+  const visited = new Set<string>();
+  const baseRefs = new Set<string>();
+  function visit(id: string): void {
+    const definition = byId.get(id);
+    if (!definition) {
+      baseRefs.add(id);
+      return;
+    }
+    if (active.has(id))
+      throw new UdcError("INVALID", "Cyclic calculated measure: " + id);
+    if (visited.has(id)) return;
+    active.add(id);
+    for (const ref of references.get(id)!) visit(ref);
+    active.delete(id);
+    visited.add(id);
+    order.push(definition);
+  }
+  for (const id of [...(requested ?? byId.keys())].sort()) visit(id);
+  if (visited.size !== definitions.length)
+    throw new UdcError("INVALID", "Unused calculated measure");
+  return { order, baseRefs, references, expressionNodes };
 }
 
 export function calculateMeasure(
   cube: QueryCube,
   definition: CalculatedMeasureDefinition,
+): CalculatedCube {
+  return calculateMeasures(cube, [definition]);
+}
+
+/** Evaluate all calculations at the final grain in deterministic dependency order. */
+export function calculateMeasures(
+  cube: QueryCube,
+  definitions: readonly CalculatedMeasureDefinition[],
 ): CalculatedCube {
   queryCube(cube);
   if (!["canonical", "aggregated", "sparse-integrated"].includes(cube.stage))
@@ -228,106 +325,125 @@ export function calculateMeasure(
       "INCOMPATIBLE",
       "Calculation requires a pre-calculated input",
     );
-  assertId(definition.id, "calculated measure");
-  assertId(definition.unit, "calculated unit");
-  if (typeof definition.name !== "string" || !definition.name.trim())
-    throw new UdcError("INVALID", "Missing calculated measure name");
+  const { order, baseRefs, references, expressionNodes } =
+    planCalculatedMeasures(definitions);
+  if (!order.length) throw new UdcError("INVALID", "Empty calculated measures");
   const measures = new Set(cube.measures.map((measure) => measure.id));
-  if (measures.has(definition.id))
-    throw new UdcError("CONFLICT", "Calculated measure already exists");
-  assertBound(cube.measures.length + 1, UDC_LIMITS.columns, "output measures");
-  const references = new Set<string>();
-  let nodes = 0;
-  function validate(expr: MeasureExpression, depth: number): void {
-    assertBound(depth, 32, "expression depth");
-    assertBound(++nodes, 100, "expression nodes");
-    if (!expr || typeof expr !== "object")
-      throw new UdcError("INVALID", "Invalid expression");
-    if (expr.kind === "constant") {
-      if (!Number.isFinite(expr.value))
-        throw new UdcError("INVALID", "Non-finite constant");
-    } else if (expr.kind === "measure") {
-      assertId(expr.measureId, "expression measure");
-      if (!measures.has(expr.measureId))
-        throw new UdcError("UNRESOLVED", "Unknown expression measure");
-      references.add(expr.measureId);
-    } else if (
-      expr.kind === "binary" &&
-      ["+", "-", "*", "/"].includes(expr.operator)
-    ) {
-      validate(expr.left, depth + 1);
-      validate(expr.right, depth + 1);
-    } else {
-      throw new UdcError("INVALID", "Invalid expression operator");
-    }
-  }
-  validate(definition.expression, 1);
-  const ids = [...references].sort();
-  const measure: MeasureDefinition = {
-    id: definition.id,
-    name: definition.name,
-    unit: definition.unit,
-    aggregation: "none",
+  for (const definition of order)
+    if (measures.has(definition.id))
+      throw new UdcError("CONFLICT", "Calculated measure already exists");
+  for (const id of baseRefs)
+    if (!measures.has(id))
+      throw new UdcError("UNRESOLVED", "Unknown expression measure: " + id);
+  assertBound(
+    cube.measures.length + order.length,
+    UDC_LIMITS.columns,
+    "output measures",
+  );
+  assertBound(
+    cube.observations.length * expressionNodes,
+    UDC_LIMITS.calculationWork,
+    "calculation work",
+  );
+  let contributorCount = 0;
+  const account = (n: number) => {
+    contributorCount += n;
+    assertBound(
+      contributorCount,
+      UDC_LIMITS.calculationContributors,
+      "calculation contributors",
+    );
   };
   const observations: CalculatedObservation[] = cube.observations.map(
     (observation) => {
-      const values = observation.values;
-      const inputs: {
-        measureId: string;
-        contributors: readonly MeasureProvenance[];
-      }[] = [];
-      let absent = false;
-      for (const id of ids) {
-        const value = Object.hasOwn(values, id) ? values[id] : undefined;
-        if (!value) {
-          if (cube.stage !== "sparse-integrated")
-            throw new UdcError("INCOMPATIBLE", "Missing input measure");
-          absent = true;
-        } else {
-          inputs.push({
-            measureId: id,
-            contributors:
-              "contributors" in value ? value.contributors : [value.provenance],
-          });
-        }
-      }
-      if (absent) return { ...observation };
-      function evaluate(expr: MeasureExpression): number | null {
-        if (expr.kind === "constant") return expr.value;
-        if (expr.kind === "measure") return values[expr.measureId]!.value;
-        const a = evaluate(expr.left);
-        const b = evaluate(expr.right);
-        if (a === null || b === null || (expr.operator === "/" && b === 0))
-          return null;
-        const result =
-          expr.operator === "+"
-            ? a + b
-            : expr.operator === "-"
-              ? a - b
-              : expr.operator === "*"
-                ? a * b
-                : a / b;
-        if (!Number.isFinite(result))
-          throw new UdcError("LIMIT", "Calculated value overflow");
-        return result;
-      }
-      return {
-        ...observation,
-        values: {
-          ...values,
-          [definition.id]: { value: evaluate(definition.expression), inputs },
-        },
+      const values: Partial<
+        Record<
+          string,
+          MeasureValue | AggregatedMeasureValue | CalculatedMeasureValue
+        >
+      > = {
+        ...observation.values,
       };
+      for (const definition of order) {
+        const inputs: {
+          measureId: string;
+          contributors: readonly MeasureProvenance[];
+        }[] = [];
+        let absent = false;
+        for (const id of references.get(definition.id)!) {
+          const value = Object.hasOwn(values, id) ? values[id] : undefined;
+          if (!value) {
+            if (cube.stage !== "sparse-integrated")
+              throw new UdcError("INCOMPATIBLE", "Missing input measure");
+            absent = true;
+          }
+        }
+        if (absent) continue;
+        for (const id of references.get(definition.id)!) {
+          const value = values[id]!;
+          let contributors: readonly MeasureProvenance[];
+          if ("inputs" in value) {
+            // Shared DAG branches reuse original provenance objects. Deduplicate
+            // them per direct operand without expanding paths exponentially.
+            const unique = new Set<MeasureProvenance>();
+            for (const input of value.inputs)
+              for (const provenance of input.contributors) {
+                if (!unique.has(provenance)) {
+                  unique.add(provenance);
+                  account(1);
+                }
+              }
+            contributors = [...unique];
+          } else {
+            contributors =
+              "contributors" in value ? value.contributors : [value.provenance];
+            account(contributors.length);
+          }
+          inputs.push({ measureId: id, contributors });
+        }
+        function evaluate(expr: MeasureExpression): number | null {
+          if (expr.kind === "constant") return expr.value;
+          if (expr.kind === "measure") return values[expr.measureId]!.value;
+          const a = evaluate(expr.left);
+          const b = evaluate(expr.right);
+          if (a === null || b === null || (expr.operator === "/" && b === 0))
+            return null;
+          const result =
+            expr.operator === "+"
+              ? a + b
+              : expr.operator === "-"
+                ? a - b
+                : expr.operator === "*"
+                  ? a * b
+                  : a / b;
+          if (!Number.isFinite(result))
+            throw new UdcError("LIMIT", "Calculated value overflow");
+          return result;
+        }
+        values[definition.id] = {
+          value: evaluate(definition.expression),
+          inputs,
+        };
+      }
+      return { ...observation, values };
     },
   );
+  const detached = JSON.parse(
+    JSON.stringify(order),
+  ) as CalculatedMeasureDefinition[];
+  const calculated: MeasureDefinition[] = order.map(({ id, name, unit }) => ({
+    id,
+    name,
+    unit,
+    aggregation: "none",
+  }));
   return {
     ...cube,
     stage: "calculated",
     inputStage: cube.stage,
-    definition: JSON.parse(
-      JSON.stringify(definition),
-    ) as CalculatedMeasureDefinition,
-    measures: [...cube.measures, measure],
+    definition: detached[detached.length - 1],
+    ...(detached.length > 1 ? { definitions: detached } : {}),
+    measures: [...cube.measures, ...calculated],
     observations,
   };
 }

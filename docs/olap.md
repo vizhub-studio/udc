@@ -99,3 +99,7 @@ Here the hierarchy must have countries as immediate children of the selected par
 An inner join here summarizes only the shared observed coordinates, not the complete population of a region. Use only data whose coverage and units support the intended interpretation.
 
 The deterministic golden workflow in `test/olap.test.ts` exercises this composition with synthetic fixtures. The operations are library-only; no application UI, data loader or database is introduced.
+
+### Multiple calculated measures
+
+`calculateMeasures(cube, definitions)` evaluates a nonempty acyclic graph of structured expressions at the final grain. It accepts forward references, rejects unknown inputs and duplicate output IDs, and retains transitive source provenance. Its result remains a terminal calculated cube, not an aggregatable cube. For compatibility, `definition` is the last evaluated definition; multi-calculation cubes additionally expose the complete ordered `definitions` array. `calculateMeasure` remains the single-definition convenience API.

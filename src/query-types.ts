@@ -155,7 +155,10 @@ export interface QueryResult {
   concordanceRevisions: AnalyticalCube["concordanceRevisions"];
   hierarchyRollups?: import("./types").AggregatedCube["hierarchyRollups"];
   join?: JoinMode;
+  /** Legacy single-calculation metadata. */
   definition?: CalculatedMeasureDefinition;
+  /** Multiple calculations in deterministic dependency order. */
+  definitions?: readonly CalculatedMeasureDefinition[];
 }
 
 // Keep the public expression contract identical to the existing operator.

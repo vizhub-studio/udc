@@ -1,6 +1,6 @@
 import { assertBound, assertId, UDC_LIMITS, UdcError } from "./limits";
 import type { CanonicalCube } from "./types";
-import type { MeasureExpression } from "./olap";
+import { planCalculatedMeasures } from "./olap";
 import type { MeasurePredicate } from "./advanced-olap";
 import type {
   QueryCatalog,
@@ -77,13 +77,6 @@ export function describeQuerySource(cube: CanonicalCube): QuerySource {
   });
 }
 
-function expressionRefs(e: MeasureExpression, refs: Set<string>): void {
-  if (e.kind === "measure") refs.add(e.measureId);
-  else if (e.kind === "binary") {
-    expressionRefs(e.left, refs);
-    expressionRefs(e.right, refs);
-  }
-}
 function predicateRefs(p: MeasurePredicate, refs: Set<string>): void {
   if (p.kind === "and" || p.kind === "or")
     for (const item of p.operands) predicateRefs(item, refs);
@@ -138,19 +131,14 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
       fail("INCOMPATIBLE", "Ordering field must be selected in the output");
   }
 
-  const calculation = query.calculatedMeasures?.[0];
-  const refs = new Set(query.measures);
-  if (query.measureFilter) predicateRefs(query.measureFilter, refs);
-  if (query.topN) refs.add(query.topN.measureId);
-  if (calculation) {
-    if (!refs.delete(calculation.id))
-      fail("INVALID", "Unused calculated measure");
-    const operands = new Set<string>();
-    expressionRefs(calculation.expression, operands);
-    if (operands.has(calculation.id))
-      fail("INVALID", "Cyclic calculated measure");
-    for (const operand of operands) refs.add(operand);
-  }
+  const roots = new Set(query.measures);
+  if (query.measureFilter) predicateRefs(query.measureFilter, roots);
+  if (query.topN) roots.add(query.topN.measureId);
+  const { order: calculations, baseRefs: refs } = planCalculatedMeasures(
+    query.calculatedMeasures ?? [],
+    [...roots],
+  );
+  const calculatedIds = new Set(calculations.map((d) => d.id));
   if (!refs.size) fail("UNRESOLVED", "Query needs at least one source measure");
   if (query.joinAnchor && !refs.has(query.joinAnchor))
     fail("INVALID", "Join anchor must be a required source measure");
@@ -218,13 +206,14 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
       (s) => s.source.snapshot.datasetId === anchor,
     )!;
     const others = planSources.filter((s) => s !== preserved);
-    planSources = join === "left" ? [preserved, ...others] : [...others, preserved];
+    planSources =
+      join === "left" ? [preserved, ...others] : [...others, preserved];
   }
   const rawIds = planSources.flatMap((s) => s.measureIds);
   assertBound(rawIds.length, UDC_LIMITS.columns, "selected source measures");
   if (new Set(rawIds).size !== rawIds.length)
     fail("CONFLICT", "Duplicate source measure");
-  if (calculation && rawIds.includes(calculation.id))
+  if (rawIds.some((id) => calculatedIds.has(id)))
     fail("CONFLICT", "Calculated measure identity collision");
   const outputIds = planSources.flatMap((s) =>
     s.source.measures
@@ -237,15 +226,20 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   );
   if (
     new Set(outputIds).size !== outputIds.length ||
-    (calculation && outputIds.includes(calculation.id))
+    outputIds.some((id) => calculatedIds.has(id))
   )
     fail("CONFLICT", "Derived measure identity collision");
+  assertBound(
+    outputIds.length + calculations.length,
+    UDC_LIMITS.columns,
+    "intermediate measures",
+  );
   const steps: QueryStep[] = [];
   if (query.filters?.length) steps.push("filter-dimensions");
   if (planSources.length > 1) steps.push("integrate");
   if (rollup) steps.push("rollup");
   if (aggregate) steps.push("aggregate");
-  if (calculation) steps.push("calculate");
+  if (calculations.length) steps.push("calculate");
   if (query.measureFilter) steps.push("filter-measures");
   if (query.topN) steps.push("top-n");
   if (query.orderBy?.length) steps.push("order");
