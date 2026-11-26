@@ -17,3 +17,4 @@ export * from "./validate-query";
 export * from "./plan-query";
 export * from "./execute-query";
 export * from "./data-provider";
+export * from "./pushdown";

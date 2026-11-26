@@ -13,7 +13,9 @@ import type {
   QueryPlanSource,
   QuerySourceRequest,
 } from "./query-types";
-import type { CanonicalCube } from "./types";
+import type { AggregatedCube, CanonicalCube } from "./types";
+import { planSourcePushdown } from "./pushdown";
+import type { SourcePushdownPlan } from "./query-types";
 
 // Canonical object key order for JSON round-tripped plans and metadata.
 function stableJson(value: unknown): string {
@@ -81,6 +83,141 @@ function projectSource(
   };
 }
 
+/** Validate projected metadata against the original full catalog declaration. */
+function subsetSource(
+  cube: CanonicalCube,
+  selected: QueryPlanSource,
+  pushdown: SourcePushdownPlan,
+): CanonicalCube {
+  const expected = {
+    ...selected.source,
+    measures: selected.source.measures.filter((m) =>
+      pushdown.measureIds.includes(m.id),
+    ),
+  };
+  if (stableJson(describeQuerySource(cube)) !== stableJson(expected))
+    throw new UdcError("CONFLICT", "Pushed subset metadata mismatch");
+  const projected = projectSource(cube, selected);
+  if (
+    diceCube(projected, pushdown.filters).observations.length !==
+    projected.observations.length
+  )
+    throw new UdcError("INVALID", "Pushed subset violates requested filters");
+  return projected;
+}
+
+/** Validate structure and sufficient statistics, not remote data completeness. */
+function validatePushedAggregate(
+  cube: AggregatedCube,
+  selected: QueryPlanSource,
+  pushdown: SourcePushdownPlan,
+): AggregatedCube {
+  if (cube.stage !== "aggregated" || cube.hierarchyRollups !== undefined)
+    throw new UdcError("INCOMPATIBLE", "Expected source-local aggregate");
+  const dimensions = pushdown.aggregateDimensions!;
+  const original = selected.source.measures.filter((m) =>
+    pushdown.measureIds.includes(m.id),
+  );
+  const measures = original.map((m) =>
+    m.aggregation === "count"
+      ? {
+          id: m.id + ":count",
+          name: m.name + " (count)",
+          unit: "observations",
+          aggregation: "sum" as const,
+        }
+      : m,
+  );
+  const expected = {
+    ...selected.source,
+    dimensions: [...dimensions].sort(),
+    measures: [...measures].sort((a, b) => compareKey(a.id, b.id)),
+  };
+  if (
+    stableJson(describeQuerySource({ ...cube, stage: "canonical", observations: [] })) !==
+    stableJson(expected)
+  )
+    throw new UdcError("CONFLICT", "Pushed aggregate metadata mismatch");
+  assertBound(cube.observations.length, UDC_LIMITS.outputObservations, "aggregate rows");
+  const groups = new Set<string>();
+  const sourceRows = new Set<number>();
+  for (const row of cube.observations) {
+    const members = row.coordinate.members;
+    if (
+      getCellKey(row.coordinate) !== row.cellKey ||
+      groups.has(row.cellKey) ||
+      members.length !== dimensions.length ||
+      new Set(members.map((m) => m.dimensionId)).size !== dimensions.length ||
+      members.some((m) => m.kind !== "canonical" || !dimensions.includes(m.dimensionId)) ||
+      Object.keys(row.values).length !== measures.length
+    )
+      throw new UdcError("INVALID", "Invalid pushed aggregate coordinate or measures");
+    groups.add(row.cellKey);
+    // Every measure has lineage for the same original rows, including nulls.
+    let groupRows: Set<number> | undefined;
+    for (const [i, measure] of measures.entries()) {
+      const raw = original[i];
+      const value = row.values[measure.id];
+      if (!value || !value.state || !Array.isArray(value.contributors))
+        throw new UdcError("INVALID", "Missing pushed aggregate state or lineage");
+      const { sum, count } = value.state;
+      const contributors = value.contributors;
+      assertBound(contributors.length, UDC_LIMITS.rows, "aggregate lineage");
+      if (
+        !contributors.length ||
+        !Number.isFinite(sum) ||
+        !Number.isSafeInteger(count) ||
+        count < 0 ||
+        count > contributors.length ||
+        (count === 0 && sum !== 0)
+      )
+        throw new UdcError("INVALID", "Invalid pushed accumulator");
+      const expectedValue =
+        raw.aggregation === "count"
+          ? sum
+          : count === 0
+            ? null
+            : raw.aggregation === "average"
+              ? sum / count
+              : sum;
+      if (
+        value.value !== expectedValue ||
+        (raw.aggregation === "count" &&
+          (count !== 1 || !Number.isSafeInteger(sum) || sum < 0 || sum > contributors.length))
+      )
+        throw new UdcError("INVALID", "Pushed value disagrees with accumulator");
+      const rows = new Set<number>();
+      for (const p of contributors) {
+        if (
+          !p ||
+          !Number.isSafeInteger(p.sourceRow) ||
+          p.sourceRow < 1 ||
+          rows.has(p.sourceRow) ||
+          p.measureId !== raw.id ||
+          p.unit !== raw.unit ||
+          stableJson(p.snapshot) !== stableJson(selected.source.snapshot) ||
+          !p.sourceCoordinate
+        )
+          throw new UdcError("INVALID", "Invalid pushed contributor lineage");
+        rows.add(p.sourceRow);
+      }
+      if (groupRows) {
+        if (rows.size !== groupRows.size || [...rows].some((id) => !groupRows!.has(id)))
+          throw new UdcError("INVALID", "Pushed measures disagree on contributing rows");
+      } else {
+        groupRows = rows;
+        for (const id of rows) {
+          if (sourceRows.has(id))
+            throw new UdcError("INVALID", "Pushed aggregate repeats source row");
+          sourceRows.add(id);
+        }
+        assertBound(sourceRows.size, UDC_LIMITS.rows, "aggregate source rows");
+      }
+    }
+  }
+  return cube;
+}
+
 type Observation = AnalyticalCube["observations"][number];
 
 function compareKey(a: string, b: string): number {
@@ -146,12 +283,34 @@ export async function executeQuery(
 
   const query = fresh.query;
   const sources: CanonicalCube[] = [];
-  // Preserve plan order and the existing source bounds. Providers must return
-  // complete canonical snapshots; only this engine applies semantic operators.
+  let pushedAggregate: AggregatedCube | undefined;
+  // Preserve plan order. Only opt-in providers can return planned subsets.
   for (const selected of fresh.sources) {
     const request = JSON.parse(
       JSON.stringify({ ...selected, filters: query.filters ?? [] }),
     ) as QuerySourceRequest;
+    const adapter = provider.pushdown;
+    if (adapter) {
+      const pushdown = planSourcePushdown(
+        fresh,
+        selected,
+        adapter.capabilities(request.source),
+      );
+      if (pushdown) {
+        // The provider cannot mutate the executor's expected operation.
+        const result = await adapter.load(JSON.parse(JSON.stringify({ ...request, pushdown })));
+        if (result.kind === "subset" && pushdown.aggregateDimensions === undefined) {
+          sources.push(diceCube(subsetSource(result.cube, selected, pushdown), query.filters ?? []));
+          continue;
+        }
+        if (result.kind === "aggregate" && pushdown.aggregateDimensions !== undefined) {
+          pushedAggregate = validatePushedAggregate(result.cube, selected, pushdown);
+          continue;
+        }
+        if (result.kind !== "unsupported")
+          throw new UdcError("INCOMPATIBLE", "Unexpected pushdown result kind");
+      }
+    }
     const cube = await provider.loadSource(request);
     if (stableJson(describeQuerySource(cube)) !== stableJson(selected.source))
       throw new UdcError(
@@ -161,9 +320,10 @@ export async function executeQuery(
     sources.push(diceCube(projectSource(cube, selected), query.filters ?? []));
   }
   let cube: AnalyticalCube =
-    sources.length === 1
+    pushedAggregate ??
+    (sources.length === 1
       ? sources[0]
-      : integrateCubes(sources[0], sources[1], { join: query.join ?? "inner" });
+      : integrateCubes(sources[0], sources[1], { join: query.join ?? "inner" }));
   for (const rollup of query.rollups ?? []) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
       throw new UdcError("INCOMPATIBLE", "Rollup requires dense input");
@@ -172,7 +332,7 @@ export async function executeQuery(
     )!;
     cube = rollupCube(cube, hierarchy, rollup.targetMembers);
   }
-  if (fresh.steps.includes("aggregate")) {
+  if (!pushedAggregate && fresh.steps.includes("aggregate")) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
       throw new UdcError("INCOMPATIBLE", "Aggregation requires dense input");
     cube = aggregateCube(cube, query.dimensions);

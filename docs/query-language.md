@@ -74,15 +74,39 @@ function providerFor(
 ```
 
 The host must authorize the sources and provide exactly the selected metadata
-and corresponding complete canonical snapshots. Each request includes the
-revision-pinned source, required measure IDs (including hidden dependencies)
-and canonical dimension filters. These are informational hints only: v3
-requires all rows and declared measures at original grain. The single UDC
-engine applies filters, joins, aggregation and projection after acquisition.
-Provider failures reject the query; no partial result or silent truncation.
+and corresponding complete canonical snapshots for the fallback loader.
+Each request includes revision-pinned source metadata, measure dependencies
+(including hidden operands), and canonical dimension filters.
+
+### Optional source pushdown
+
+A provider may expose `pushdown: { capabilities(source), load(request) }`.
+UDC negotiates exact source-local dimension filtering and measure projection,
+and may request aggregation only for one source, no hierarchy rollups,
+no residual dimension filter, and additive/count/average measures. Original
+grain is retained for federation. All other operators stay in UDC.
+
+The load request includes a backend-neutral `pushdown` plan: exact filters
+(OR within an axis, AND across axes), measure IDs, and optional
+`aggregateDimensions` (including [] for scalar). Return a discriminated
+`subset` with a canonical cube, `aggregate` with an aggregated cube, or
+`unsupported` to use the full loader. A subset retains the source dimensions,
+snapshot, schema and concordance revisions, selected measure definitions and
+original source-row provenance. It must contain every matching observation,
+not a page or sample. Aggregation must exactly reproduce aggregateCube,
+including null handling, count-derived measure IDs, sufficient statistics,
+canonical contributor order and all contributing rows, including nulls.
+An empty input returns no groups, even for scalar queries. Floating-point
+reduction order must be equivalent; providers that cannot guarantee this
+must decline aggregation. UDC verifies result metadata, coordinate grain,
+filter membership for subsets, aggregate state and contributor structure;
+it cannot prove remote completeness or verify values against unseen rows.
+
+The provider owns revision consistency, canonical mappings, authorization and
+resource bounds on remote work. Returned rows and aggregate lineage remain
+bounded. Failures reject the query; only explicit unsupported permits fallback.
+No SQL compilation, database drivers, connections or credentials live in UDC.
 The provider and hierarchy inputs must remain immutable during execution.
-UDC neither opens connections nor performs network I/O itself. SQL compilation,
-pushdown, credentials and authorization are outside this release.
 
 ## Query properties
 

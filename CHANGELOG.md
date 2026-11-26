@@ -5,7 +5,7 @@
 - Breaking: `executeQuery` returns `Promise<QueryResult>` and accepts `{ provider, hierarchies? }` instead of `{ cubes, hierarchies? }`.
 - Add `DataProvider`, `QuerySourceRequest`, and `createInMemoryProvider`. Metadata-only planning and pure OLAP operations remain synchronous; there is no legacy synchronous executor.
 - Verify the exact plan before acquisition and recheck the returned source metadata before applying existing operators. Preserve revision pins, row limits and lineage.
-- Providers return full canonical snapshots. No SQL, pushdown, driver, authentication or npm publication in this PR.
+- Add optional source capability negotiation, dimension filter and measure projection pushdown, and guarded single-source aggregation with validated metadata and lineage. No SQL, driver, authentication or npm publication in this PR.
 
 ## Unreleased — declarative JSON queries
 

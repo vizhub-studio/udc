@@ -30,6 +30,8 @@ for (const name of [
   "QueryResult",
   "DataProvider",
   "QuerySourceRequest",
+  "SourcePushdownPlan",
+  "SourcePushdownProvider",
 ]) {
   assert.match(
     declarations,
@@ -51,6 +53,7 @@ for (const name of [
   "planQuery",
   "executeQuery",
   "createInMemoryProvider",
+  "planSourcePushdown",
   "aggregateCube",
 ]) {
   assert.equal(typeof mod[name], "function", name + " must be exported");

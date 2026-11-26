@@ -64,7 +64,8 @@ The advanced exports `drilldownCube`, `filterCube`, `rankCube`, `topNCube`, `Ana
 - `describeQuerySource(cube)`: derive immutable catalog metadata from a canonical cube.
 - `planQuery(query, catalog)`: resolve dependencies and produce an inspectable, JSON-serializable QueryPlan.
 - `createInMemoryProvider(cubes)`: adapt selected revision-pinned canonical cubes to a `DataProvider`.
-- `DataProvider`: selected source metadata and an async `loadSource(request)` method returning a complete canonical cube.
+- `DataProvider`: selected source metadata, a full async canonical loader, and optional backend-neutral `SourcePushdownProvider`.
+- `planSourcePushdown(plan, selected, capabilities)`: choose safe source-local operations; see [query language](query-language.md) for the exact-result contract.
 - `executeQuery(plan, inputs)`: asynchronously acquire the selected sources, verify revision pins, and return a `Promise<QueryResult>`; `inputs.provider` is required.
 
 See [query language](query-language.md) for fields, execution order, and limits.
