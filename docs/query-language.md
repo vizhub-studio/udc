@@ -3,8 +3,8 @@
 The query API composes the existing UDC operators without introducing a SQL
 parser, evaluation of expression strings, a network loader, or a database.
 The syntax is inspired by Cube's semantic JSON API and Druid's structured
-arithmetic. The host supplies an authorized semantic catalog and immutable
-canonical source cubes.
+arithmetic. The host supplies an authorized semantic catalog and an asynchronous
+provider for immutable canonical source cubes.
 
 ```ts
 import {
@@ -12,6 +12,7 @@ import {
   validateQuery,
   planQuery,
   executeQuery,
+  createInMemoryProvider,
 } from "@vizhub/udc";
 
 // gdp and population are revision-pinned CanonicalCubes from the host.
@@ -39,7 +40,9 @@ validateQuery(query);
 const plan = planQuery(query, {
   sources: [describeQuerySource(gdp), describeQuerySource(population)],
 });
-const result = executeQuery(plan, { cubes: [gdp, population] });
+const result = await executeQuery(plan, {
+  provider: createInMemoryProvider([gdp, population]),
+});
 ```
 
 The same query object can be supplied as JSON after runtime validation.
@@ -48,6 +51,62 @@ measure IDs and ordered operator steps; no rows, executable functions or loaders
 A catalog can be built from metadata without fetching rows. The convenience
 function `describeQuerySource` derives that metadata from an existing canonical
 cube. Each source must have one dataset snapshot with an immutable revision.
+
+## Data providers (UDC 3.0)
+
+`executeQuery` now always returns a promise. Replace
+`executeQuery(plan, { cubes })` with
+`await executeQuery(plan, { provider: createInMemoryProvider(cubes) })`.
+For remote acquisition, implement `DataProvider` instead:
+
+```ts
+import type { DataProvider, QueryPlan } from "@vizhub/udc";
+
+function providerFor(
+  plan: QueryPlan,
+  load: DataProvider["loadSource"],
+): DataProvider {
+  return {
+    sources: plan.sources.map((entry) => entry.source),
+    loadSource: load,
+  };
+}
+```
+
+The host must authorize the sources and provide exactly the selected metadata
+and corresponding complete canonical snapshots for the fallback loader.
+Each request includes revision-pinned source metadata, measure dependencies
+(including hidden operands), and canonical dimension filters.
+
+### Optional source pushdown
+
+A provider may expose `pushdown: { capabilities(source), load(request) }`.
+UDC negotiates exact source-local dimension filtering and measure projection,
+and may request aggregation only for one source, no hierarchy rollups,
+no residual dimension filter, and additive/count/average measures. Original
+grain is retained for federation. All other operators stay in UDC.
+
+The load request includes a backend-neutral `pushdown` plan: exact filters
+(OR within an axis, AND across axes), measure IDs, and optional
+`aggregateDimensions` (including [] for scalar). Return a discriminated
+`subset` with a canonical cube, `aggregate` with an aggregated cube, or
+`unsupported` to use the full loader. A subset retains the source dimensions,
+snapshot, schema and concordance revisions, selected measure definitions and
+original source-row provenance. It must contain every matching observation,
+not a page or sample. Aggregation must exactly reproduce aggregateCube,
+including null handling, count-derived measure IDs, sufficient statistics,
+canonical contributor order and all contributing rows, including nulls.
+An empty input returns no groups, even for scalar queries. Floating-point
+reduction order must be equivalent; providers that cannot guarantee this
+must decline aggregation. UDC verifies result metadata, coordinate grain,
+filter membership for subsets, aggregate state and contributor structure;
+it cannot prove remote completeness or verify values against unseen rows.
+
+The provider owns revision consistency, canonical mappings, authorization and
+resource bounds on remote work. Returned rows and aggregate lineage remain
+bounded. Failures reject the query; only explicit unsupported permits fallback.
+No SQL compilation, database drivers, connections or credentials live in UDC.
+The provider and hierarchy inputs must remain immutable during execution.
 
 ## Query properties
 

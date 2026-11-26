@@ -10,6 +10,7 @@ import {
   validateQuery,
   planQuery,
   executeQuery,
+  createInMemoryProvider,
 } from "../dist/index.js";
 
 const read = (file) =>
@@ -98,7 +99,7 @@ const cubes = [
   toCanonical(gdp, gdpSchema, "world-bank-gdp"),
 ];
 const catalog = { sources: cubes.map(describeQuerySource) };
-const query = (spec) => {
+const query = async (spec) => {
   validateQuery(spec);
   const plan = planQuery(spec, catalog);
   const selected = cubes.filter((cube) =>
@@ -107,14 +108,14 @@ const query = (spec) => {
         source.source.snapshot.datasetId === cube.snapshots[0].datasetId,
     ),
   );
-  return executeQuery(plan, { cubes: selected });
+  return executeQuery(plan, { provider: createInMemoryProvider(selected) });
 };
 const queryDimensions = ["country", "year"];
 const filters = [{ dimensionId: "year", memberIds: ["year:1960"] }];
 const countryOf = (row) =>
   row.coordinate.members.find((m) => m.dimensionId === "country")?.id;
 
-const joined = query({
+const joined = await query({
   version: 1,
   dimensions: queryDimensions,
   measures: ["population", "gdp-usd"],
@@ -128,7 +129,7 @@ console.log(
   })),
 );
 
-const top = query({
+const top = await query({
   version: 1,
   dimensions: queryDimensions,
   measures: ["gdp-per-capita"],

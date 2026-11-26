@@ -1,5 +1,6 @@
 import type {
   CanonicalCube,
+  AggregatedCube,
   DatasetSnapshot,
   Dimension,
   MeasureDefinition,
@@ -78,8 +79,60 @@ export interface QueryPlan {
   sources: readonly QueryPlanSource[];
   steps: readonly QueryStep[];
 }
+/** Full-snapshot acquisition request; selections are informational hints. */
+export interface QuerySourceRequest extends QueryPlanSource {
+  filters: readonly DiceSelection[];
+}
+
+/**
+ * Host-owned, revision-pinned data acquisition. Supply exactly the sources
+ * selected by the plan. A load must return the complete canonical cube at its
+ * original grain, with every declared measure and provenance; no truncation,
+ * filtering, projection or aggregation is permitted in loadSource.
+ */
+export interface DataProvider {
+  readonly sources: readonly QuerySource[];
+  loadSource(request: QuerySourceRequest): Promise<CanonicalCube>;
+  /** Optional, per-source optimization. The full loader remains the fallback. */
+  pushdown?: SourcePushdownProvider;
+}
+
+/** Opt in only to operations with exactly equivalent canonical semantics. */
+export interface SourcePushdownCapabilities {
+  filter?: boolean;
+  project?: boolean;
+  aggregate?: boolean;
+}
+
+/** Exact source operation contract; no physical names or backend syntax. */
+export interface SourcePushdownPlan {
+  filters: readonly DiceSelection[];
+  measureIds: readonly string[];
+  /** Absent means original grain; [] means scalar aggregation. */
+  aggregateDimensions?: readonly string[];
+}
+
+export interface SourcePushdownRequest extends QuerySourceRequest {
+  pushdown: SourcePushdownPlan;
+}
+
+export type SourcePushdownResult =
+  | { kind: "unsupported" }
+  | { kind: "subset"; cube: CanonicalCube }
+  | { kind: "aggregate"; cube: AggregatedCube };
+
+/**
+ * Trusted host adapter. Results must be complete for the requested operation,
+ * at the pinned revision, with original provenance and deterministic semantics.
+ * Only an explicit unsupported result triggers full-snapshot fallback.
+ */
+export interface SourcePushdownProvider {
+  capabilities(source: QuerySource): SourcePushdownCapabilities;
+  load(request: SourcePushdownRequest): Promise<SourcePushdownResult>;
+}
+
 export type QueryInputs = {
-  cubes: readonly CanonicalCube[];
+  provider: DataProvider;
   hierarchies?: readonly Hierarchy[];
 };
 type QueryObservation = AnalyticalCube["observations"][number];

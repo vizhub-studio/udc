@@ -15,6 +15,7 @@ import {
   describeQuerySource,
   planQuery,
   executeQuery,
+  createInMemoryProvider,
   validateQuery,
   UdcError,
   type CanonicalCube,
@@ -313,16 +314,18 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       }),
   );
 
-  function run(query: QuerySpec, cubes = sources()) {
+  async function run(query: QuerySpec, cubes = sources()) {
     const decoded: unknown = JSON.parse(JSON.stringify(query));
     validateQuery(decoded);
     const plan = planQuery(decoded, {
       sources: cubes.map(describeQuerySource),
     });
-    return executeQuery(JSON.parse(JSON.stringify(plan)), { cubes });
+    return executeQuery(JSON.parse(JSON.stringify(plan)), {
+      provider: createInMemoryProvider(cubes),
+    });
   }
 
-  it("discovers both hidden operands and matches every independently joined CSV observation and source row", () => {
+  it("discovers both hidden operands and matches every independently joined CSV observation and source row", async () => {
     const cubes = sources();
     const plan = planQuery(ratioQuery, {
       sources: cubes.map(describeQuerySource),
@@ -333,7 +336,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     ]);
     expect(plan.steps).toEqual(["integrate", "calculate", "project"]);
     expect(expected).toHaveLength(6);
-    const result = run(ratioQuery, cubes);
+    const result = await run(ratioQuery, cubes);
     expect(result.observations).toHaveLength(expected.length);
     expect(result.measures).toMatchObject([
       { id: "gdp-per-capita", unit: "USD/person", aggregation: "none" },
@@ -395,7 +398,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(result.snapshots).toEqual(expect.arrayContaining([un, wb]));
   });
 
-  it("selects only the required source from a multi-source catalog", () => {
+  it("selects only the required source from a multi-source catalog", async () => {
     const cubes = sources();
     const query: QuerySpec = {
       version: 1,
@@ -404,7 +407,9 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     };
     const plan = planQuery(query, { sources: cubes.map(describeQuerySource) });
     expect(plan.sources.map((s) => s.source.snapshot)).toEqual([un]);
-    const result = executeQuery(plan, { cubes: [cubes[0]] });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider([cubes[0]]),
+    });
     expect(result.observations).toHaveLength(2);
     for (const row of result.observations) {
       const year = row.coordinate.members[0].id;
@@ -413,10 +418,12 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
         .reduce((sum, e) => sum + e.population, 0);
       expect(row.values.population?.value).toBeCloseTo(total, 4);
     }
-    expect(() => executeQuery(plan, { cubes })).toThrow(UdcError);
+    await expect(
+      executeQuery(plan, { provider: createInMemoryProvider(cubes) }),
+    ).rejects.toThrow(UdcError);
   });
 
-  it("calculates regional ratios of totals with explicit hierarchy and contributor evidence", () => {
+  it("calculates regional ratios of totals with explicit hierarchy and contributor evidence", async () => {
     // This is a fixture hierarchy, not an imported official classification.
     const hierarchy = createHierarchy({
       key: "fixture-geography",
@@ -451,7 +458,10 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       sources: cubes.map(describeQuerySource),
       hierarchies: [hierarchy],
     });
-    const result = executeQuery(plan, { cubes, hierarchies: [hierarchy] });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider(cubes),
+      hierarchies: [hierarchy],
+    });
     expect(result.observations).toHaveLength(4);
     expect(result.hierarchyRollups).toHaveLength(1);
     for (const row of result.observations) {
@@ -499,7 +509,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     }
   });
 
-  it("filters by year and hidden population before selecting top countries per year", () => {
+  it("filters by year and hidden population before selecting top countries per year", async () => {
     const query: QuerySpec = {
       ...ratioQuery,
       filters: [{ dimensionId: "year", memberIds: ["year:1960", "year:2010"] }],
@@ -517,7 +527,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
         ties: "exact",
       },
     };
-    const result = run(query);
+    const result = await run(query);
     const winners = ["1960", "2010"].map(
       (yr) =>
         expected
@@ -527,7 +537,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(result.observations.map((r) => r.cellKey).sort()).toEqual(
       winners.map((e) => key(e.id, e.year)).sort(),
     );
-    const sliced = run({
+    const sliced = await run({
       ...query,
       filters: [{ dimensionId: "year", memberIds: ["year:1960"] }],
     });
@@ -536,7 +546,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     ]);
   });
 
-  it("distinguishes absent, null, and zero operands using explicitly perturbed fixture rows", () => {
+  it("distinguishes absent, null, and zero operands using explicitly perturbed fixture rows", async () => {
     const p = popRows.map((row) =>
       row.countryCode === "156" && row.year === "1960"
         ? { ...row, population: "0" }
@@ -555,7 +565,7 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       join: "full",
       measures: ["population", "gdp-current-usd", "gdp-per-capita"],
     };
-    const result = run(query, cubes);
+    const result = await run(query, cubes);
     expect(result.observations).toHaveLength(6);
     const at = (id: string, yr: string) =>
       result.observations.find((r) => r.cellKey === key(id, yr))!;
@@ -573,13 +583,13 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(Object.hasOwn(missing.values, "gdp-current-usd")).toBe(false);
     expect(Object.hasOwn(missing.values, "gdp-per-capita")).toBe(false);
     expect(missing.presence).toBeDefined();
-    expect(run(ratioQuery, cubes).observations).toHaveLength(5);
-    expect(() => run({ ...query, dimensions: ["year"] }, cubes)).toThrow(
-      UdcError,
-    );
+    expect((await run(ratioQuery, cubes)).observations).toHaveLength(5);
+    await expect(
+      run({ ...query, dimensions: ["year"] }, cubes),
+    ).rejects.toThrow(UdcError);
   });
 
-  it("round-trips JSON, is deterministic for reordered canonical observations, and rejects stale revisions", () => {
+  it("round-trips JSON, is deterministic for reordered canonical observations, and rejects stale revisions", async () => {
     const cubes = sources();
     const before = JSON.stringify(cubes);
     const plan = planQuery(ratioQuery, {
@@ -592,9 +602,13 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(
       planQuery(ratioQuery, { sources: reordered.map(describeQuerySource) }),
     ).toEqual(plan);
-    const result = executeQuery(plan, { cubes });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider(cubes),
+    });
     expect(
-      executeQuery(JSON.parse(JSON.stringify(plan)), { cubes: reordered }),
+      await executeQuery(JSON.parse(JSON.stringify(plan)), {
+        provider: createInMemoryProvider(reordered),
+      }),
     ).toEqual(result);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
     expect(JSON.stringify(cubes)).toBe(before);
@@ -602,6 +616,8 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       popRows.map((row) => ({ ...row })),
       gdpRows,
     );
-    expect(() => executeQuery(plan, { cubes: revised })).toThrow(UdcError);
+    await expect(
+      executeQuery(plan, { provider: createInMemoryProvider(revised) }),
+    ).rejects.toThrow(UdcError);
   });
 });
