@@ -351,19 +351,19 @@ const cube = createCube(
 
 ## Operations
 
-| Function                                                      | Purpose                                                                         |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `createCube(rows, schema, snapshot)`                          | Create a typed SourceCube with measure provenance                               |
-| `codedRef`, `canonicalMember`, `memberIdentity`, `getCellKey` | Portable and order-invariant coordinate identities                              |
-| `validateSemanticSchema(schema, columns?)`                    | Validate schema mappings, IDs, and field coverage                               |
-| `resolveConcordance(mappings, context)`                       | Verified exact-equivalence closure with conflicts                               |
-| `canonicalizeCube(source, concordance)`                       | Translate coded coordinates to canonical member identities                      |
-| `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
+| Function                                                      | Purpose                                                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `createCube(rows, schema, snapshot)`                          | Create a typed SourceCube with measure provenance                                           |
+| `codedRef`, `canonicalMember`, `memberIdentity`, `getCellKey` | Portable and order-invariant coordinate identities                                          |
+| `validateSemanticSchema(schema, columns?)`                    | Validate schema mappings, IDs, and field coverage                                           |
+| `resolveConcordance(mappings, context)`                       | Verified exact-equivalence closure with conflicts                                           |
+| `canonicalizeCube(source, concordance)`                       | Translate coded coordinates to canonical member identities                                  |
+| `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain                    |
 | `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none`/`min`/`max` policy |
-| `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
-| `projectDatasetCoverage(source, dimensions)`                  | Project and deduplicate canonical coordinates for one dataset                   |
-| `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs       |
-| `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors     |
+| `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                                    |
+| `projectDatasetCoverage(source, dimensions)`                  | Project and deduplicate canonical coordinates for one dataset                               |
+| `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs                   |
+| `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors                 |
 
 For direct multi-source integration, call `integrateManyCubes(cubes, { join: "inner" })`.
 Left joins anchor the first input; right joins anchor the last. The binary
