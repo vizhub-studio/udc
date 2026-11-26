@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { csvParse } from "d3-dsv";
 import { describe, expect, it } from "vitest";
 import {
+  calculateMeasure,
   canonicalizeCube,
   canonicalMember,
   codedRef,
@@ -345,6 +346,8 @@ describe("development cube: five country sources", () => {
     const cubes = countryCubes();
     const q: QuerySpec = {
       ...spec,
+      measures: [...spec.measures.filter((id) => id !== "yield"), "capacity"],
+      calculatedMeasures: spec.calculatedMeasures!.filter((d) => d.id !== "yield"),
       filters: [{ dimensionId: "year", memberIds: ["2010"] }],
     };
     const p = plan(q, cubes);
@@ -359,6 +362,8 @@ describe("development cube: five country sources", () => {
           calls.push(source.snapshots[0].datasetId);
           expect(request.pushdown.aggregateDimensions).toBeUndefined();
           const ids = request.pushdown.measureIds;
+          if (source.snapshots[0].datasetId === "fictional-energy")
+            expect(ids).toEqual(["capacity"]);
           return {
             kind: "subset",
             cube: {
@@ -436,6 +441,21 @@ describe("development cube: US state drill-down", () => {
         expect(r.values[id].contributors).toHaveLength(50);
         expect(new Set(r.values[id].contributors.map((p) => p.sourceRow)).size).toBe(50);
       }
+    }
+    const ratio = binary("gdp-per-person", "gdp", "population", "USD/person", "/");
+    const nationalRatios = calculateMeasure(national, ratio);
+    const stateRatios = calculateMeasure(drilled, ratio);
+    expect(stateRatios.observations).toHaveLength(100);
+    for (const r of nationalRatios.observations) {
+      const yr = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
+      const us = expected.find((e) => e.geo === "usa" && e.year === yr)!;
+      expect(r.values["gdp-per-person"]?.value).toBeCloseTo(us.gdp / us.pop);
+    }
+    for (const r of stateRatios.observations) {
+      const code = r.coordinate.members.find((m) => m.dimensionId === "geo")!.id.slice(6);
+      const yr = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
+      const raw = stateRows.find((s) => s.geo === code && s.year === yr)!;
+      expect(r.values["gdp-per-person"]?.value).toBeCloseTo(Number(raw.gdp) / Number(raw.population));
     }
     expect(() => drilldownCube(national, hierarchy, "usa")).toThrow(UdcError);
     const mixed: CanonicalCube = {
