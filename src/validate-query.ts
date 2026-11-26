@@ -59,6 +59,7 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
       "measures",
       "aggregationOverrides",
       "filters",
+      "drilldown",
       "rollups",
       "calculatedMeasures",
       "measureFilter",
@@ -142,6 +143,16 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
       seen.add(dim);
       ids(f.memberIds, UDC_LIMITS.rows, "members", false);
     }
+  }
+  if (q.drilldown !== undefined) {
+    const drilldown = obj(
+      q.drilldown,
+      ["hierarchyKey", "revision", "parentMemberId"],
+      "drill-down",
+    );
+    id(drilldown.hierarchyKey);
+    id(drilldown.revision);
+    id(drilldown.parentMemberId);
   }
   if (q.rollups !== undefined) {
     const seen = new Set<string>();
