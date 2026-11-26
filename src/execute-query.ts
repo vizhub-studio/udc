@@ -1,7 +1,12 @@
 import { aggregateCube } from "./aggregate-cube";
 import { integrateManyCubes } from "./integrate-cubes";
 import { calculateMeasures, diceCube, rollupCube } from "./olap";
-import { filterCube, topNCube, type AnalyticalCube } from "./advanced-olap";
+import {
+  drilldownCube,
+  filterCube,
+  topNCube,
+  type AnalyticalCube,
+} from "./advanced-olap";
 import { getCellKey } from "./coordinate";
 import { assertBound, UDC_LIMITS, UdcError } from "./limits";
 import { describeQuerySource, planQuery } from "./plan-query";
@@ -415,6 +420,15 @@ export async function executeQuery(
         aggregation: overrides.get(m.id) ?? m.aggregation,
       })),
     };
+  }
+  if (query.drilldown) {
+    if (cube.stage !== "canonical" && cube.stage !== "aggregated")
+      throw new UdcError("INCOMPATIBLE", "Drill-down requires dense input");
+    const { hierarchyKey, revision, parentMemberId } = query.drilldown;
+    const hierarchy = hierarchies!.find(
+      (h) => h.key === hierarchyKey && h.revision === revision,
+    )!;
+    cube = drilldownCube(cube, hierarchy, parentMemberId);
   }
   for (const rollup of query.rollups ?? []) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
