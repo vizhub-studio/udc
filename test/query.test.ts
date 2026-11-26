@@ -1309,16 +1309,23 @@ function pushdownProvider(
         const ids = request.pushdown.measureIds;
         const projected = {
           ...raw,
-          measures: raw.measures.filter((m) => ids.includes(m.id)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+          measures: raw.measures
+            .filter((m) => ids.includes(m.id))
+            .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
           observations: raw.observations.map((row) => ({
             ...row,
-            values: Object.fromEntries(Object.entries(row.values).filter(([id]) => ids.includes(id))),
+            values: Object.fromEntries(
+              Object.entries(row.values).filter(([id]) => ids.includes(id)),
+            ),
           })),
         };
         const subset = diceCube(projected, request.pushdown.filters);
         return request.pushdown.aggregateDimensions === undefined
           ? { kind: "subset", cube: subset }
-          : { kind: "aggregate", cube: aggregateCube(subset, request.pushdown.aggregateDimensions) };
+          : {
+              kind: "aggregate",
+              cube: aggregateCube(subset, request.pushdown.aggregateDimensions),
+            };
       },
     },
   };
@@ -1331,14 +1338,22 @@ describe("backend-neutral query pushdown", () => {
     async (operator) => {
       const data = source("m", populationRows, "m", operator);
       for (const dimensions of [[], ["time"], ["space"]]) {
-        for (const selection of [undefined, filters, [{ dimensionId: "time", memberIds: [] }]]) {
+        for (const selection of [
+          undefined,
+          filters,
+          [{ dimensionId: "time", memberIds: [] }],
+        ]) {
           const q: QuerySpec = {
-            version: 1, dimensions, measures: [operator === "count" ? "m:count" : "m"],
+            version: 1,
+            dimensions,
+            measures: [operator === "count" ? "m:count" : "m"],
             ...(selection ? { filters: selection } : {}),
           };
           const requests: SourcePushdownRequest[] = [];
           const provider = pushdownProvider([data], all, requests);
-          expect(await executeQuery(plan(q, [data]), { provider })).toEqual(await run(q, [data]));
+          expect(await executeQuery(plan(q, [data]), { provider })).toEqual(
+            await run(q, [data]),
+          );
           expect(requests[0].pushdown.aggregateDimensions).toEqual(dimensions);
         }
       }
@@ -1349,14 +1364,24 @@ describe("backend-neutral query pushdown", () => {
     for (const q of [
       { ...ratioQuery, dimensions: ["time"], filters },
       { ...ratioQuery, filters, rollups },
-      { ...base, measures: ["population", "gdp"], join: "full" as const, filters },
+      {
+        ...base,
+        measures: ["population", "gdp"],
+        join: "full" as const,
+        filters,
+      },
     ]) {
       const cubes = [population, gdp];
       const requests: SourcePushdownRequest[] = [];
       const provider = pushdownProvider(cubes, all, requests);
       const adapter = provider.pushdown!;
-      adapter.capabilities = (s) => s.snapshot.datasetId === "gdp" ? all : {};
-      expect(await executeQuery(plan(q, cubes), { provider, hierarchies: [hierarchy] })).toEqual(await run(q, cubes));
+      adapter.capabilities = (s) => (s.snapshot.datasetId === "gdp" ? all : {});
+      expect(
+        await executeQuery(plan(q, cubes), {
+          provider,
+          hierarchies: [hierarchy],
+        }),
+      ).toEqual(await run(q, cubes));
       expect(requests).toHaveLength(1);
       expect(requests[0].pushdown.aggregateDimensions).toBeUndefined();
     }
@@ -1364,11 +1389,16 @@ describe("backend-neutral query pushdown", () => {
 
   it("projects unused measures and preserves original source provenance", async () => {
     const extra = source("unused", populationRows, "unused", "none");
-    const multi = { ...integrateCubes(population, extra), snapshots: population.snapshots };
+    const multi = {
+      ...integrateCubes(population, extra),
+      snapshots: population.snapshots,
+    };
     const q = { ...base, filters };
     const requests: SourcePushdownRequest[] = [];
     const provider = pushdownProvider([multi], all, requests);
-    expect(await executeQuery(plan(q, [multi]), { provider })).toEqual(await run(q, [multi]));
+    expect(await executeQuery(plan(q, [multi]), { provider })).toEqual(
+      await run(q, [multi]),
+    );
     expect(requests[0].pushdown.measureIds).toEqual(["population"]);
   });
 
@@ -1379,13 +1409,26 @@ describe("backend-neutral query pushdown", () => {
     ] as const) {
       const requests: SourcePushdownRequest[] = [];
       const provider = pushdownProvider([population], caps, requests);
-      expect(await executeQuery(plan(q), { provider, hierarchies: [hierarchy] })).toEqual(await run(q));
-      expect(requests.every((r) => r.pushdown.aggregateDimensions === undefined)).toBe(true);
+      expect(
+        await executeQuery(plan(q), { provider, hierarchies: [hierarchy] }),
+      ).toEqual(await run(q));
+      expect(
+        requests.every((r) => r.pushdown.aggregateDimensions === undefined),
+      ).toBe(true);
     }
-    const nonAdditive = source("population", populationRows, "population", "none");
+    const nonAdditive = source(
+      "population",
+      populationRows,
+      "population",
+      "none",
+    );
     const q = { ...base, dimensions: [] };
     const requests: SourcePushdownRequest[] = [];
-    await expect(executeQuery(plan(q, [nonAdditive]), { provider: pushdownProvider([nonAdditive], all, requests) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(plan(q, [nonAdditive]), {
+        provider: pushdownProvider([nonAdditive], all, requests),
+      }),
+    ).rejects.toThrow(UdcError);
     expect(requests).toHaveLength(0);
   });
 
@@ -1396,13 +1439,23 @@ describe("backend-neutral query pushdown", () => {
     let fullLoads = 0;
     const provider: DataProvider = {
       ...memory,
-      async loadSource(request) { fullLoads++; return memory.loadSource(request); },
-      pushdown: { capabilities: () => all, async load() { return { kind: "unsupported" }; } },
+      async loadSource(request) {
+        fullLoads++;
+        return memory.loadSource(request);
+      },
+      pushdown: {
+        capabilities: () => all,
+        async load() {
+          return { kind: "unsupported" };
+        },
+      },
     };
     expect(await executeQuery(p, { provider })).toEqual(await run(q));
     expect(fullLoads).toBe(1);
     const error = new Error("backend unavailable");
-    provider.pushdown!.load = async () => { throw error; };
+    provider.pushdown!.load = async () => {
+      throw error;
+    };
     await expect(executeQuery(p, { provider })).rejects.toBe(error);
     expect(fullLoads).toBe(1);
   });
@@ -1413,19 +1466,37 @@ describe("backend-neutral query pushdown", () => {
     const first = population.observations[0];
     for (const cube of [
       population,
-      { ...diceCube(population, filters), snapshots: [{ datasetId: "population", revision: "wrong" }] },
+      {
+        ...diceCube(population, filters),
+        snapshots: [{ datasetId: "population", revision: "wrong" }],
+      },
       { ...diceCube(population, filters), observations: [first, first] },
-      { ...diceCube(population, filters), observations: [{ ...first, values: {} }] },
+      {
+        ...diceCube(population, filters),
+        observations: [{ ...first, values: {} }],
+      },
     ]) {
       const provider: DataProvider = {
         ...memory,
-        pushdown: { capabilities: () => all, async load() { return { kind: "subset", cube }; } },
+        pushdown: {
+          capabilities: () => all,
+          async load() {
+            return { kind: "subset", cube };
+          },
+        },
       };
-      await expect(executeQuery(plan(q), { provider })).rejects.toThrow(UdcError);
+      await expect(executeQuery(plan(q), { provider })).rejects.toThrow(
+        UdcError,
+      );
     }
     const provider: DataProvider = {
       ...memory,
-      pushdown: { capabilities: () => all, async load() { return { kind: "aggregate", cube: aggregateCube(population, []) }; } },
+      pushdown: {
+        capabilities: () => all,
+        async load() {
+          return { kind: "aggregate", cube: aggregateCube(population, []) };
+        },
+      },
     };
     await expect(executeQuery(plan(q), { provider })).rejects.toThrow(UdcError);
   });
@@ -1442,36 +1513,70 @@ describe("backend-neutral query pushdown", () => {
         { ...value, value: 999 },
         { ...value, state: { sum: 150, count: -1 } },
         { ...value, contributors: [] },
-        { ...value, contributors: [...value.contributors, value.contributors[0]] },
-        { ...value, contributors: value.contributors.map(p => ({ ...p, snapshot: { ...p.snapshot, revision: "wrong" } })) },
-      ].map((v) => ({ ...valid, observations: [{ ...row, values: { population: v } }] })),
+        {
+          ...value,
+          contributors: [...value.contributors, value.contributors[0]],
+        },
+        {
+          ...value,
+          contributors: value.contributors.map((p) => ({
+            ...p,
+            snapshot: { ...p.snapshot, revision: "wrong" },
+          })),
+        },
+      ].map((v) => ({
+        ...valid,
+        observations: [{ ...row, values: { population: v } }],
+      })),
     ]) {
       const provider: DataProvider = {
         ...memory,
-        pushdown: { capabilities: () => all, async load() { return { kind: "aggregate", cube }; } },
+        pushdown: {
+          capabilities: () => all,
+          async load() {
+            return { kind: "aggregate", cube };
+          },
+        },
       };
-      await expect(executeQuery(plan(q), { provider })).rejects.toThrow(UdcError);
+      await expect(executeQuery(plan(q), { provider })).rejects.toThrow(
+        UdcError,
+      );
     }
   });
 
   it("matches randomized subsets and aggregates with residual sorting and limits", async () => {
     let state = 147;
-    const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state; };
+    const random = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state;
+    };
     for (let i = 0; i < 30; i++) {
       const rows: Row[] = Array.from({ length: 20 }, (_, j) => [
-        "c" + (j % 5), "y" + Math.floor(j / 5), random() % 4 === 0 ? null : (random() % 201) - 100,
+        "c" + (j % 5),
+        "y" + Math.floor(j / 5),
+        random() % 4 === 0 ? null : (random() % 201) - 100,
       ]);
       const operator = (["sum", "average", "count"] as const)[i % 3];
       const data = source("m", rows, "m", operator);
       const dimensions = i % 2 ? ["space"] : ["time"];
       const id = operator === "count" ? "m:count" : "m";
       const q: QuerySpec = {
-        version: 1, dimensions, measures: [id],
-        filters: [{ dimensionId: "space", memberIds: ["c" + (random() % 5), "c" + (random() % 5)] }],
-        orderBy: [{ kind: "measure", measureId: id, direction: "desc" }], limit: random() % 5,
+        version: 1,
+        dimensions,
+        measures: [id],
+        filters: [
+          {
+            dimensionId: "space",
+            memberIds: ["c" + (random() % 5), "c" + (random() % 5)],
+          },
+        ],
+        orderBy: [{ kind: "measure", measureId: id, direction: "desc" }],
+        limit: random() % 5,
       };
       const provider = pushdownProvider([data], all, []);
-      expect(await executeQuery(plan(q, [data]), { provider })).toEqual(await run(q, [data]));
+      expect(await executeQuery(plan(q, [data]), { provider })).toEqual(
+        await run(q, [data]),
+      );
     }
   });
 });
