@@ -225,3 +225,20 @@ production dependencies. This source change does not publish an npm version.
 ### Composable calculated measures
 
 A measure expression can reference any declared calculated measure by ID, irrespective of declaration order. Requested output measures, measure predicates and ranking determine the roots; all intermediate dependencies must be reachable. The planner resolves only base operands against the source catalog. Calculations run once per row in deterministic topological order after rollups and aggregation and before measure predicates, ranking and projection. Missing operands remain absent and explicit nulls propagate. Each direct input retains transitive original source-row contributors, deduplicated across shared dependency paths within that input. Single-calculation results retain `definition`; multi-calculation results expose `definitions` in evaluation order. Query syntax remains version 1.
+
+### Explicit aggregation overrides
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country"],
+  "measures": ["population"],
+  "aggregationOverrides": [
+    { "measureId": "population", "operator": "max" }
+  ]
+}
+```
+
+Overrides apply to selected base measures (including hidden operands) before any hierarchy rollup or dimensional reduction. Operators are sum, count, average, none, min and max; omitted overrides retain source defaults. Explicit overrides may supersede none; application-level semantic governance remains the host's responsibility. Overrides require a reduction, are unique per base measure, and cannot target calculated or unused measures. Count retains the existing derived `measureId:count` output identity. All reduction stages use the same effective operator, with counts subsequently summed. Source definitions and lineage are not mutated. Min/max ignore nulls and retain mergeable extrema plus non-null counts. Sparse outer-join aggregation remains unsupported.
+
+Providers with legacy aggregate capability can execute sum/count/average only. Providers may explicitly opt into min/max via `aggregateOperators`; pushed extrema must return `state: { sum: 0, count, extremum }`, where extremum is null exactly when count is zero. Query overrides conservatively disable aggregation pushdown, but filter/project pushdown remains available. This avoids changing the existing provider request contract. Distinct count, weighted average, per-axis policies, and multiple operators per measure are deferred.

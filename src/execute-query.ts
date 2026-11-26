@@ -185,14 +185,21 @@ function validatePushedAggregate(
         (count === 0 && sum !== 0)
       )
         throw new UdcError("INVALID", "Invalid pushed accumulator");
+      const isExtremum = raw.aggregation === "min" || raw.aggregation === "max";
+      const extremum = value.state.extremum;
+      if (isExtremum && (sum !== 0 || extremum === undefined ||
+        (count === 0 ? extremum !== null : typeof extremum !== "number" || !Number.isFinite(extremum))))
+        throw new UdcError("INVALID", "Invalid pushed extremum accumulator");
       const expectedValue =
         raw.aggregation === "count"
           ? sum
           : count === 0
             ? null
-            : raw.aggregation === "average"
-              ? sum / count
-              : sum;
+            : isExtremum
+              ? extremum
+              : raw.aggregation === "average"
+                ? sum / count
+                : sum;
       if (
         value.value !== expectedValue ||
         (raw.aggregation === "count" &&
@@ -385,6 +392,19 @@ export async function executeQuery(
       : integrateManyCubes(sources, {
           join: query.join ?? "inner",
         }));
+  if (query.aggregationOverrides?.length) {
+    if (cube.stage !== "canonical")
+      throw new UdcError("INCOMPATIBLE", "Aggregation overrides require dense raw input");
+    const overrides = new Map(query.aggregationOverrides.map((o) => [o.measureId, o.operator] as const));
+    // Source metadata was verified above; change only query-local measure definitions.
+    cube = {
+      ...cube,
+      measures: cube.measures.map((m) => ({
+        ...m,
+        aggregation: overrides.get(m.id) ?? m.aggregation,
+      })),
+    };
+  }
   for (const rollup of query.rollups ?? []) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
       throw new UdcError("INCOMPATIBLE", "Rollup requires dense input");

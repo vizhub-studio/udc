@@ -359,7 +359,7 @@ const cube = createCube(
 | `resolveConcordance(mappings, context)`                       | Verified exact-equivalence closure with conflicts                               |
 | `canonicalizeCube(source, concordance)`                       | Translate coded coordinates to canonical member identities                      |
 | `integrateCubes(a, b, { join })`                              | Inner (default), left, right, or full joins at identical canonical grain        |
-| `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none` policy |
+| `aggregateCube(cube, retainDimensionIds)`                     | Explicit roll-ups honoring each measure's `sum`/`count`/`average`/`none`/`min`/`max` policy |
 | `sliceCube(cube, member)`                                     | Select a member and remove its dimension                                        |
 | `projectDatasetCoverage(source, dimensions)`                  | Project and deduplicate canonical coordinates for one dataset                   |
 | `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs       |
@@ -447,3 +447,5 @@ Failures throw a typed `UdcError` carrying a `UdcErrorCode` (`INVALID`, `LIMIT`,
 UDC is useful without VizHub. Visualization and data platforms may supply their own CSV/TSV bytes, schema revisions, reviewed mappings and provenance. In VizHub AI Studio, authorization, project membership and registry-source access must remain in the hosting application; the standalone library **does not perform authorization**. A source hash is an identity, not an access token.
 
 UDC is MIT-licensed. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
+
+Queries can explicitly override base-measure aggregation defaults with `aggregationOverrides: [{ measureId: "population", operator: "max" }]` when reducing grain or rolling up a hierarchy. See [query language](docs/query-language.md).

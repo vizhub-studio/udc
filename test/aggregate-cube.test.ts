@@ -151,3 +151,42 @@ describe("explicit cube aggregation", () => {
     expect(() => aggregateCube(duplicate, [])).toThrow(UdcError);
   });
 });
+
+describe("mergeable extrema", () => {
+  it.each(["min", "max"] as const)("matches direct and repeated %s with nulls and lineage", (aggregation) => {
+    const data = { ...source, measures: source.measures.map((m) => m.id === "revenue" ? { ...m, aggregation } : m) };
+    const direct = aggregateCube(data, []);
+    const repeated = aggregateCube(aggregateCube(data, ["country"]), []);
+    const expected = aggregation === "min" ? 10 : 50;
+    for (const cube of [direct, repeated]) {
+      const value = cube.observations[0].values.revenue;
+      expect(value.value).toBe(expected);
+      expect(value.state).toEqual({ sum: 0, count: 3, extremum: expected });
+      expect(value.contributors.map((p) => p.sourceRow).sort()).toEqual([1,2,3,4]);
+    }
+    const allNull = aggregateCube({ ...data, observations: [data.observations[3]] }, []);
+    expect(allNull.observations[0].values.revenue).toMatchObject({ value: null, state: { sum: 0, count: 0, extremum: null } });
+  });
+
+  it.each(["min", "max"] as const)("handles huge values without an irrelevant sum overflow (%s)", (aggregation) => {
+    const data = { ...source, measures: source.measures.map((m) => m.id === "revenue" ? { ...m, aggregation } : m),
+      observations: source.observations.map((o) => ({ ...o, values: { ...o.values, revenue: { ...o.values.revenue, value: Number.MAX_VALUE } } })) };
+    expect(aggregateCube(data, []).observations[0].values.revenue.value).toBe(Number.MAX_VALUE);
+  });
+
+  it("matches seeded independent extrema across random groups and ordering", () => {
+    let seed = 1234567;
+    const next = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
+    for (let trial = 0; trial < 40; trial++) {
+      const numbers = Array.from({ length: 20 }, () => next() % 5 === 0 ? null : (next() % 200) - 100);
+      const observations = numbers.map((n, i) => row("c" + (i % 3), String(i), i + 1, n, 0, null));
+      const valid = numbers.filter((n): n is number => n !== null);
+      for (const aggregation of ["min", "max"] as const) {
+        const data = { ...source, measures: source.measures.map((m) => m.id === "revenue" ? { ...m, aggregation } : m), observations };
+        const expected = !valid.length ? null : aggregation === "min" ? Math.min(...valid) : Math.max(...valid);
+        expect(aggregateCube(data, []).observations[0].values.revenue.value).toBe(expected);
+        expect(aggregateCube(aggregateCube({ ...data, observations: [...observations].reverse() }, ["country"]), []).observations[0].values.revenue.value).toBe(expected);
+      }
+    }
+  });
+});

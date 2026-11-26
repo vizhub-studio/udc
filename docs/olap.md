@@ -103,3 +103,5 @@ The deterministic golden workflow in `test/olap.test.ts` exercises this composit
 ### Multiple calculated measures
 
 `calculateMeasures(cube, definitions)` evaluates a nonempty acyclic graph of structured expressions at the final grain. It accepts forward references, rejects unknown inputs and duplicate output IDs, and retains transitive source provenance. Its result remains a terminal calculated cube, not an aggregatable cube. For compatibility, `definition` is the last evaluated definition; multi-calculation cubes additionally expose the complete ordered `definitions` array. `calculateMeasure` remains the single-definition convenience API.
+
+Minimum and maximum ignore nulls, return null for all-null groups, and merge extrema across repeated rollups without computing irrelevant sums. Provenance retains all contributing source rows, including nulls.

@@ -1,5 +1,12 @@
 # Change log
 
+## Unreleased — explicit aggregation overrides and extrema
+
+- Add query-local base-measure aggregation overrides and min/max default policies.
+- Merge extrema across rollups with null handling and provenance; preserve existing accumulator shapes.
+- Negotiate extrema pushdown explicitly; keep overrides local while retaining safe filter/project pushdown.
+- Extend validation, docs and regression tests without production dependencies.
+
 ## Unreleased — composable calculated measures
 
 - Resolve multiple structured calculated measures, including hidden intermediates, forward references and acyclic dependencies.

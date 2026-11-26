@@ -39,7 +39,7 @@ function normalizeSource(source: QuerySource): QuerySource {
   for (const measure of measures) {
     assertId(measure.id, "measure");
     assertId(measure.unit, "unit");
-    if (!["sum", "count", "average", "none"].includes(measure.aggregation))
+    if (!["sum", "count", "average", "none", "min", "max"].includes(measure.aggregation))
       fail("INVALID", "Invalid aggregation");
   }
   if (
@@ -93,6 +93,9 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
     "catalog sources",
   );
   const sources = catalog.sources.map(normalizeSource);
+  const overrides = new Map(
+    (query.aggregationOverrides ?? []).map((o) => [o.measureId, o.operator] as const),
+  );
   if (new Set(sources.map((s) => s.snapshot.datasetId)).size !== sources.length)
     fail("CONFLICT", "Multiple catalog snapshots for one dataset");
   const requiredAxes = new Set([
@@ -157,7 +160,7 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
       return source.measures
         .filter((m) => {
           const output =
-            reduces && m.aggregation === "count" ? m.id + ":count" : m.id;
+            reduces && (overrides.get(m.id) ?? m.aggregation) === "count" ? m.id + ":count" : m.id;
           return output === ref;
         })
         .map((m) => ({ source, measureId: m.id }));
@@ -213,13 +216,19 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   assertBound(rawIds.length, UDC_LIMITS.columns, "selected source measures");
   if (new Set(rawIds).size !== rawIds.length)
     fail("CONFLICT", "Duplicate source measure");
+  for (const id of overrides.keys()) {
+    if (calculatedIds.has(id) || !rawIds.includes(id))
+      fail("INCOMPATIBLE", "Aggregation override requires a selected base measure: " + id);
+    if (!aggregate && !rollup)
+      fail("INCOMPATIBLE", "Aggregation override requires a reduction");
+  }
   if (rawIds.some((id) => calculatedIds.has(id)))
     fail("CONFLICT", "Calculated measure identity collision");
   const outputIds = planSources.flatMap((s) =>
     s.source.measures
       .filter((m) => s.measureIds.includes(m.id))
       .map((m) =>
-        (aggregate || rollup) && m.aggregation === "count"
+        (aggregate || rollup) && (overrides.get(m.id) ?? m.aggregation) === "count"
           ? m.id + ":count"
           : m.id,
       ),
