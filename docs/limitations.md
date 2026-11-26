@@ -1,6 +1,6 @@
 # Scope, resource limits, and security
 
-The first standalone release ports the typed, fixture-tested **virtual cube core**, not a complete online analytical database or VizHub dataset service.
+UDC is a typed, fixture-tested **virtual cube core**, not a complete online analytical database or VizHub dataset service.
 
 ## Resource bounds
 
@@ -8,7 +8,9 @@ The imported `UDC_LIMITS` are deliberately conservative:
 
 | Budget                                 |   Value |
 | -------------------------------------- | ------: |
-| Cube inputs in current integration API |       2 |
+| Selected sources / measures            |     100 |
+| Cumulative integration input rows       | 100,000 |
+| Cumulative integration input values     | 1,000,000 |
 | Rows per source cube                   |  10,000 |
 | Columns per source                     |     100 |
 | Output observations                    |  10,000 |
@@ -21,12 +23,12 @@ Core operations reject over-budget row/column counts rather than silently trunca
 ## Not implemented
 
 - Dataset HTTP fetching, downloadable semantic manifests or an automatic browser loader
-- Joins with unequal dimensions, arbitrary dimension hierarchies, automatic numeric aggregation, or unit conversions
+- Joins with unequal dimensions, inferred dimension hierarchies, automatic numeric aggregation, or unit conversions
 - Semantic inference, codelist auto-approval, hierarchy editing or persistent semantic governance
-- Automatic hierarchy discovery, code-to-canonical resolution for hierarchy edges or hierarchy-aware cube rollups
+- Automatic hierarchy discovery or code-to-canonical resolution for hierarchy edges
 - Public/private source authorization, access tokens, tenant policy or cross-origin proxying
 - Sparse-join aggregation or implicit missing-measure fills (non-inner results require an explicit policy)
-- Automatic ingestion, durable coverage indexing, database pushdown, large files or Arrow/Parquet parsing
+- Automatic ingestion, durable coverage indexing, database-specific adapters, large files or Arrow/Parquet parsing
 - Persisted materialized cubes or remote registry/database APIs
 
 ## Security boundaries

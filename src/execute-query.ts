@@ -1,5 +1,5 @@
 import { aggregateCube } from "./aggregate-cube";
-import { integrateCubes } from "./integrate-cubes";
+import { integrateManyCubes } from "./integrate-cubes";
 import { calculateMeasure, diceCube, rollupCube } from "./olap";
 import { filterCube, topNCube, type AnalyticalCube } from "./advanced-olap";
 import { getCellKey } from "./coordinate";
@@ -312,6 +312,14 @@ export async function executeQuery(
   const query = fresh.query;
   const sources: CanonicalCube[] = [];
   let pushedAggregate: AggregatedCube | undefined;
+  let inputRows = 0;
+  let inputValues = 0;
+  const accountSource = (cube: CanonicalCube) => {
+    inputRows += cube.observations.length;
+    inputValues += cube.observations.length * cube.measures.length;
+    assertBound(inputRows, UDC_LIMITS.integrationInputRows, "query input rows");
+    assertBound(inputValues, UDC_LIMITS.integrationInputValues, "query input values");
+  };
   // Preserve plan order. Only opt-in providers can return planned subsets.
   for (const selected of fresh.sources) {
     const request = JSON.parse(
@@ -333,6 +341,7 @@ export async function executeQuery(
           result.kind === "subset" &&
           pushdown.aggregateDimensions === undefined
         ) {
+          accountSource(result.cube);
           sources.push(
             diceCube(
               subsetSource(result.cube, selected, pushdown),
@@ -362,13 +371,14 @@ export async function executeQuery(
         "CONFLICT",
         "Provider returned different source metadata",
       );
+    accountSource(cube);
     sources.push(diceCube(projectSource(cube, selected), query.filters ?? []));
   }
   let cube: AnalyticalCube =
     pushedAggregate ??
     (sources.length === 1
       ? sources[0]
-      : integrateCubes(sources[0], sources[1], {
+      : integrateManyCubes(sources, {
           join: query.join ?? "inner",
         }));
   for (const rollup of query.rollups ?? []) {

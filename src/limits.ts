@@ -1,5 +1,8 @@
 export const UDC_LIMITS = {
-  cubes: 2,
+  // At least one selected measure per source; the column budget also applies.
+  cubes: 100,
+  integrationInputRows: 100_000,
+  integrationInputValues: 1_000_000,
   rows: 10_000,
   columns: 100,
   outputObservations: 10_000,

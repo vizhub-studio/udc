@@ -157,7 +157,9 @@ Here and in the subsequent examples, `query` is the corresponding JSON
 object after validation. UDC resolves the required measures and joins at
 equivalent canonical coordinates. The default inner join keeps shared
 observations only. Full, left and right joins are also available; directional
-joins require a semantic `joinAnchor` measure. Sparse outer-join results
+joins require a semantic `joinAnchor` measure. Inner joins intersect all
+selected sources, full joins union them, and directional joins retain the
+anchor's coordinates. N-way sparse rows expose `presence.sources`. Sparse outer-join results
 cannot be implicitly aggregated.
 
 ### 6. Roll up a hierarchy
@@ -271,8 +273,9 @@ that order, skipping unnecessary steps. Ambiguous source providers,
 incompatible grains, invalid expressions and stale plans fail with typed errors
 rather than being guessed or silently corrected.
 
-The v1 query API supports at most two selected source cubes and one calculated
-measure. It does not load data, authorize access, convert units, infer hierarchy
+The v1 query API supports multiple selected source cubes at identical canonical
+grain and one calculated measure. Source, measure, cumulative input and output
+budgets apply. It does not load data, authorize access, convert units, infer hierarchy
 relationships or support sorting by hidden fields and chained calculations. The host
 must supply authorized, immutable inputs and compatible units. Drill-down and
 coverage queries remain available through the lower-level operators.
@@ -361,6 +364,10 @@ const cube = createCube(
 | `projectDatasetCoverage(source, dimensions)`                  | Project and deduplicate canonical coordinates for one dataset                   |
 | `countDatasetCoverage(datasets, dimensions)`                  | Count distinct dataset IDs at projected coordinates across bounded inputs       |
 | `createHierarchy(definition)`                                 | Validate a named, versioned canonical member forest; find parents/ancestors     |
+
+For direct multi-source integration, call `integrateManyCubes(cubes, { join: "inner" })`.
+Left joins anchor the first input; right joins anchor the last. The binary
+operator and its existing result shape are unchanged.
 
 ### OLAP query operators
 

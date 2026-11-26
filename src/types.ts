@@ -104,11 +104,22 @@ export interface CanonicalCube extends CubeBase<Member> {
  * with value: null means the source observed the coordinate but reported null.
  * No synthetic value or provenance is created for an absent observation.
  */
+export interface JoinPresence {
+  /** Binary compatibility; for N-way joins these describe the two groups. */
+  readonly left: boolean;
+  readonly right: boolean;
+  /** Present for N-way joins, in deterministic input order. */
+  readonly sources?: readonly {
+    datasetId: string;
+    present: boolean;
+  }[];
+}
+
 export interface SparseIntegratedObservation {
   coordinate: Coordinate<Member>;
   cellKey: CellKey;
   values: Readonly<Partial<Record<string, MeasureValue>>>;
-  presence: Readonly<{ left: boolean; right: boolean }>;
+  presence: JoinPresence;
 }
 
 /** Outer-join outputs cannot masquerade as complete CanonicalCubes. */
