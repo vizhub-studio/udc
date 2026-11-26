@@ -76,10 +76,25 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
     invalid("empty measures");
   if (q.aggregationOverrides !== undefined) {
     const seen = new Set<string>();
-    for (const item of arr(q.aggregationOverrides, UDC_LIMITS.columns, "aggregation overrides")) {
-      const override = obj(item, ["measureId", "operator"], "aggregation override");
+    for (const item of arr(
+      q.aggregationOverrides,
+      UDC_LIMITS.columns,
+      "aggregation overrides",
+    )) {
+      const override = obj(
+        item,
+        ["measureId", "operator"],
+        "aggregation override",
+      );
       const measureId = id(override.measureId);
-      oneOf(override.operator, ["sum", "count", "average", "none", "min", "max"]);
+      oneOf(override.operator, [
+        "sum",
+        "count",
+        "average",
+        "none",
+        "min",
+        "max",
+      ]);
       if (seen.has(measureId))
         throw new UdcError("DUPLICATE", "Duplicate aggregation override");
       seen.add(measureId);

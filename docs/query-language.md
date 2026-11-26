@@ -233,9 +233,7 @@ A measure expression can reference any declared calculated measure by ID, irresp
   "version": 1,
   "dimensions": ["country"],
   "measures": ["population"],
-  "aggregationOverrides": [
-    { "measureId": "population", "operator": "max" }
-  ]
+  "aggregationOverrides": [{ "measureId": "population", "operator": "max" }]
 }
 ```
 

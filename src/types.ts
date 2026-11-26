@@ -42,7 +42,8 @@ export interface DimensionFieldMapping {
   codelist: Codelist;
 }
 /** An explicit roll-up rule for non-null measure values. */
-export type AggregationOperator = "sum" | "count" | "average" | "none" | "min" | "max";
+export type AggregationOperator =
+  "sum" | "count" | "average" | "none" | "min" | "max";
 
 export interface MeasureDefinition {
   id: string;

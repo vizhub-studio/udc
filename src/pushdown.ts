@@ -29,7 +29,9 @@ export function planSourcePushdown(
       .every(
         (m) =>
           m.aggregation !== "none" &&
-          (capabilities.aggregateOperators ?? ["sum", "count", "average"]).includes(m.aggregation),
+          (
+            capabilities.aggregateOperators ?? ["sum", "count", "average"]
+          ).includes(m.aggregation),
       );
   if (
     !canAggregate &&

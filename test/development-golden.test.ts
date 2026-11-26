@@ -28,7 +28,9 @@ import {
 } from "../src/index";
 
 const read = (name: string) =>
-  csvParse(readFileSync(new URL("./fixtures/" + name, import.meta.url), "utf8"));
+  csvParse(
+    readFileSync(new URL("./fixtures/" + name, import.meta.url), "utf8"),
+  );
 
 type Row = Record<string, string>;
 const places = [
@@ -185,9 +187,20 @@ const binary = (
 const spec: QuerySpec = {
   version: 1,
   dimensions: ["geo", "year"],
-  measures: ["gdp-per-person", "co2-per-dollar", "investment-per-person", "yield"],
+  measures: [
+    "gdp-per-person",
+    "co2-per-dollar",
+    "investment-per-person",
+    "yield",
+  ],
   calculatedMeasures: [
-    binary("investment-per-person", "investment", "population", "USD/person", "/"),
+    binary(
+      "investment-per-person",
+      "investment",
+      "population",
+      "USD/person",
+      "/",
+    ),
     binary("gdp-per-person", "gdp", "population", "USD/person", "/"),
     binary("co2-per-dollar", "co2", "gdp", "tonnes/USD", "/"),
     binary("yield", "generation", "capacity", "hours", "/"),
@@ -195,7 +208,9 @@ const spec: QuerySpec = {
   ],
 };
 const member = (
-  row: CanonicalCube["observations"][number] | Awaited<ReturnType<typeof executeQuery>>["observations"][number],
+  row:
+    | CanonicalCube["observations"][number]
+    | Awaited<ReturnType<typeof executeQuery>>["observations"][number],
   axis: string,
 ) => row.coordinate.members.find((m) => m.dimensionId === axis)!.id;
 
@@ -210,7 +225,9 @@ function plan(query: QuerySpec, cubes: CanonicalCube[]) {
 async function run(query: QuerySpec, cubes = countryCubes()) {
   const p = plan(query, cubes);
   const selected = cubes.filter((c) =>
-    p.sources.some((s) => s.source.snapshot.datasetId === c.snapshots[0].datasetId),
+    p.sources.some(
+      (s) => s.source.snapshot.datasetId === c.snapshots[0].datasetId,
+    ),
   );
   return executeQuery(p, {
     provider: createInMemoryProvider(selected),
@@ -221,7 +238,9 @@ async function run(query: QuerySpec, cubes = countryCubes()) {
 // Raw-record oracle deliberately does not use cube operators or cell keys.
 const expected = places.flatMap((p) =>
   years.map((year) => {
-    const pr = population.find((r) => r.countryCode === p.m49 && r.year === year)!;
+    const pr = population.find(
+      (r) => r.countryCode === p.m49 && r.year === year,
+    )!;
     const gr = gdp.find((r) => r.countryCode === p.iso && r.year === year)!;
     const cr = carbon.find((r) => r.countryCode === p.iso && r.year === year)!;
     const er = energy.find((r) => r.geo === p.name && r.year === year)!;
@@ -258,7 +277,10 @@ describe("development cube: five country sources", () => {
         (r) => member(r, "geo") === e.geo && member(r, "year") === e.year,
       )!;
       expect(row.values["gdp-per-person"]?.value).toBeCloseTo(e.gdp / e.pop);
-      expect(row.values["co2-per-dollar"]?.value).toBeCloseTo(e.co2 / e.gdp, 10);
+      expect(row.values["co2-per-dollar"]?.value).toBeCloseTo(
+        e.co2 / e.gdp,
+        10,
+      );
       expect(row.values["investment-per-person"]?.value).toBeCloseTo(
         e.investment / e.pop,
         10,
@@ -267,16 +289,23 @@ describe("development cube: five country sources", () => {
       const derived = row.values["investment-per-person"];
       expect(derived).toHaveProperty("inputs");
       if (!derived || !("inputs" in derived)) throw Error("Missing lineage");
-      const contributors = derived.inputs.flatMap((input) => input.contributors);
+      const contributors = derived.inputs.flatMap(
+        (input) => input.contributors,
+      );
       expect(contributors).toHaveLength(3);
       for (const c of contributors) {
-        expect(c.sourceRow).toBe(e.rows[c.snapshot.datasetId as keyof typeof e.rows]);
+        expect(c.sourceRow).toBe(
+          e.rows[c.snapshot.datasetId as keyof typeof e.rows],
+        );
         expect(c.snapshot).toEqual(
-          cubes.find((s) => s.snapshots[0].datasetId === c.snapshot.datasetId)!.snapshots[0],
+          cubes.find((s) => s.snapshots[0].datasetId === c.snapshot.datasetId)!
+            .snapshots[0],
         );
       }
       expect(contributors.map((c) => c.measureId).sort()).toEqual([
-        "population", "private", "public",
+        "population",
+        "private",
+        "public",
       ]);
     }
     expect(await run(spec, [...cubes].reverse())).toEqual(result);
@@ -287,21 +316,28 @@ describe("development cube: five country sources", () => {
       ...spec,
       measures: [...spec.measures, "capacity"],
       aggregationOverrides: [{ measureId: "capacity", operator: "max" }],
-      rollups: [{
-        hierarchyKey: hierarchy.key,
-        revision: hierarchy.revision,
-        targetMembers: ["asia", "north-america"],
-      }],
+      rollups: [
+        {
+          hierarchyKey: hierarchy.key,
+          revision: hierarchy.revision,
+          targetMembers: ["asia", "north-america"],
+        },
+      ],
     };
     const result = await run(q);
     expect(result.observations).toHaveLength(4);
     for (const row of result.observations) {
-      const group = expected.filter((e) => e.year === member(row, "year") &&
-        (e.geo === "usa" ? "north-america" : "asia") === member(row, "geo"));
+      const group = expected.filter(
+        (e) =>
+          e.year === member(row, "year") &&
+          (e.geo === "usa" ? "north-america" : "asia") === member(row, "geo"),
+      );
       const total = (key: "pop" | "gdp" | "generation") =>
         group.reduce((n, e) => n + e[key], 0);
       const max = Math.max(...group.map((e) => e.capacity));
-      expect(row.values["gdp-per-person"]?.value).toBeCloseTo(total("gdp") / total("pop"));
+      expect(row.values["gdp-per-person"]?.value).toBeCloseTo(
+        total("gdp") / total("pop"),
+      );
       expect(row.values.capacity?.value).toBe(max);
       expect(row.values.yield?.value).toBeCloseTo(total("generation") / max);
     }
@@ -314,32 +350,42 @@ describe("development cube: five country sources", () => {
     });
     expect(top.observations.map((r) => member(r, "year"))).toEqual(years);
     expect(top.observations.map((r) => member(r, "geo"))).toEqual([
-      "north-america", "north-america",
+      "north-america",
+      "north-america",
     ]);
   });
 
   it("distinguishes absent, null and zero and prohibits sparse rollups", async () => {
-    const modified = investment.slice(1).map((r, i) =>
-      i === 0 ? { ...r, public: "" } : i === 1 ? { ...r, public: "0" } : r,
-    );
+    const modified = investment
+      .slice(1)
+      .map((r, i) =>
+        i === 0 ? { ...r, public: "" } : i === 1 ? { ...r, public: "0" } : r,
+      );
     const cubes = countryCubes(modified);
     const q: QuerySpec = {
-      version: 1, dimensions: spec.dimensions,
+      version: 1,
+      dimensions: spec.dimensions,
       measures: ["population", "gdp", "co2", "capacity", "public"],
       join: "full",
     };
     const result = await run(q, cubes);
-    const at = (geo: string, year: string) => result.observations.find(
-      (r) => member(r, "geo") === geo && member(r, "year") === year,
-    )!;
+    const at = (geo: string, year: string) =>
+      result.observations.find(
+        (r) => member(r, "geo") === geo && member(r, "year") === year,
+      )!;
     expect(at("india", "1960").values.public).toBeUndefined();
     expect(at("india", "1960").presence?.sources).toContainEqual({
-      datasetId: "fictional-investment", present: false,
+      datasetId: "fictional-investment",
+      present: false,
     });
     expect(at("india", "2010").values.public?.value).toBeNull();
     expect(at("china", "1960").values.public?.value).toBe(0);
-    await expect(run({ ...q, dimensions: ["year"] }, cubes)).rejects.toThrow(UdcError);
-    expect(() => plan(spec, [...countryCubes(), stateCube()])).toThrow(UdcError);
+    await expect(run({ ...q, dimensions: ["year"] }, cubes)).rejects.toThrow(
+      UdcError,
+    );
+    expect(() => plan(spec, [...countryCubes(), stateCube()])).toThrow(
+      UdcError,
+    );
   });
 
   it("compares independently filtered/projected provider responses to full loading", async () => {
@@ -347,18 +393,25 @@ describe("development cube: five country sources", () => {
     const q: QuerySpec = {
       ...spec,
       measures: [...spec.measures.filter((id) => id !== "yield"), "capacity"],
-      calculatedMeasures: spec.calculatedMeasures!.filter((d) => d.id !== "yield"),
+      calculatedMeasures: spec.calculatedMeasures!.filter(
+        (d) => d.id !== "yield",
+      ),
       filters: [{ dimensionId: "year", memberIds: ["2010"] }],
     };
     const p = plan(q, cubes);
     const calls: string[] = [];
     const provider: DataProvider = {
       ...createInMemoryProvider(cubes),
-      async loadSource() { throw Error("Unexpected fallback"); },
+      async loadSource() {
+        throw Error("Unexpected fallback");
+      },
       pushdown: {
         capabilities: () => ({ filter: true, project: true, aggregate: true }),
         async load(request) {
-          const source = cubes.find((c) => c.snapshots[0].datasetId === request.source.snapshot.datasetId)!;
+          const source = cubes.find(
+            (c) =>
+              c.snapshots[0].datasetId === request.source.snapshot.datasetId,
+          )!;
           calls.push(source.snapshots[0].datasetId);
           expect(request.pushdown.aggregateDimensions).toBeUndefined();
           const ids = request.pushdown.measureIds;
@@ -373,17 +426,30 @@ describe("development cube: five country sources", () => {
                 .filter((row) => member(row, "year") === "2010")
                 .map((row) => ({
                   ...row,
-                  values: Object.fromEntries(Object.entries(row.values).filter(([id]) => ids.includes(id))),
+                  values: Object.fromEntries(
+                    Object.entries(row.values).filter(([id]) =>
+                      ids.includes(id),
+                    ),
+                  ),
                 })),
             },
           };
         },
       },
     };
-    expect(await executeQuery(p, { provider, hierarchies: [hierarchy] })).toEqual(await run(q, cubes));
-    expect(calls.sort()).toEqual(cubes.map((c) => c.snapshots[0].datasetId).sort());
+    expect(
+      await executeQuery(p, { provider, hierarchies: [hierarchy] }),
+    ).toEqual(await run(q, cubes));
+    expect(calls.sort()).toEqual(
+      cubes.map((c) => c.snapshots[0].datasetId).sort(),
+    );
     const stale = countryCubes(investment.slice(1));
-    await expect(executeQuery(p, { provider: createInMemoryProvider(stale), hierarchies: [hierarchy] })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, {
+        provider: createInMemoryProvider(stale),
+        hierarchies: [hierarchy],
+      }),
+    ).rejects.toThrow(UdcError);
   });
 });
 
@@ -396,7 +462,8 @@ function share(total: number, i: number) {
 const stateRows = years.flatMap((year) => {
   const us = expected.find((e) => e.geo === "usa" && e.year === year)!;
   return states.map((geo, i) => ({
-    geo, year,
+    geo,
+    year,
     population: String(share(us.pop, i)),
     gdp: String(share(us.gdp, i)),
     co2: String(share(us.co2, i)),
@@ -420,29 +487,48 @@ describe("development cube: US state drill-down", () => {
     const drilled = drilldownCube(fine, hierarchy, "usa");
     expect(drilled.observations).toHaveLength(100);
     for (const r of drilled.observations) {
-      const code = r.coordinate.members.find((m) => m.dimensionId === "geo")!.id.slice(6);
+      const code = r.coordinate.members
+        .find((m) => m.dimensionId === "geo")!
+        .id.slice(6);
       const yr = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
       const index = stateRows.findIndex((s) => s.geo === code && s.year === yr);
       expect(index).toBeGreaterThanOrEqual(0);
-      expect(r.values.population.value).toBe(Number(stateRows[index].population));
-      expect(r.values.population.contributors.map((p) => p.sourceRow)).toEqual([index + 1]);
+      expect(r.values.population.value).toBe(
+        Number(stateRows[index].population),
+      );
+      expect(r.values.population.contributors.map((p) => p.sourceRow)).toEqual([
+        index + 1,
+      ]);
     }
     const national = rollupCube(fine, hierarchy, ["usa"]);
     const continental = rollupCube(national, hierarchy, ["north-america"]);
     const world = rollupCube(continental, hierarchy, ["world"]);
     for (const r of world.observations) {
-      const year = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
+      const year = r.coordinate.members.find(
+        (m) => m.dimensionId === "year",
+      )!.id;
       const us = expected.find((e) => e.geo === "usa" && e.year === year)!;
       for (const [id, value] of Object.entries({
-        population: us.pop, gdp: us.gdp, co2: us.co2,
-        capacity: us.capacity, investment: us.investment,
+        population: us.pop,
+        gdp: us.gdp,
+        co2: us.co2,
+        capacity: us.capacity,
+        investment: us.investment,
       })) {
         expect(r.values[id].value).toBeCloseTo(value, 3);
         expect(r.values[id].contributors).toHaveLength(50);
-        expect(new Set(r.values[id].contributors.map((p) => p.sourceRow)).size).toBe(50);
+        expect(
+          new Set(r.values[id].contributors.map((p) => p.sourceRow)).size,
+        ).toBe(50);
       }
     }
-    const ratio = binary("gdp-per-person", "gdp", "population", "USD/person", "/");
+    const ratio = binary(
+      "gdp-per-person",
+      "gdp",
+      "population",
+      "USD/person",
+      "/",
+    );
     const nationalRatios = calculateMeasure(national, ratio);
     const stateRatios = calculateMeasure(drilled, ratio);
     expect(stateRatios.observations).toHaveLength(100);
@@ -452,19 +538,36 @@ describe("development cube: US state drill-down", () => {
       expect(r.values["gdp-per-person"]?.value).toBeCloseTo(us.gdp / us.pop);
     }
     for (const r of stateRatios.observations) {
-      const code = r.coordinate.members.find((m) => m.dimensionId === "geo")!.id.slice(6);
+      const code = r.coordinate.members
+        .find((m) => m.dimensionId === "geo")!
+        .id.slice(6);
       const yr = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
       const raw = stateRows.find((s) => s.geo === code && s.year === yr)!;
-      expect(r.values["gdp-per-person"]?.value).toBeCloseTo(Number(raw.gdp) / Number(raw.population));
+      expect(r.values["gdp-per-person"]?.value).toBeCloseTo(
+        Number(raw.gdp) / Number(raw.population),
+      );
     }
     expect(() => drilldownCube(national, hierarchy, "usa")).toThrow(UdcError);
     const mixed: CanonicalCube = {
       ...fine,
-      observations: [...fine.observations, {
-        ...fine.observations[0],
-        coordinate: { members: [canonicalMember("geo", "usa"), canonicalMember("year", "1960")] },
-        cellKey: getCellKey({ members: [canonicalMember("geo", "usa"), canonicalMember("year", "1960")] }),
-      }],
+      observations: [
+        ...fine.observations,
+        {
+          ...fine.observations[0],
+          coordinate: {
+            members: [
+              canonicalMember("geo", "usa"),
+              canonicalMember("year", "1960"),
+            ],
+          },
+          cellKey: getCellKey({
+            members: [
+              canonicalMember("geo", "usa"),
+              canonicalMember("year", "1960"),
+            ],
+          }),
+        },
+      ],
     };
     expect(() => rollupCube(mixed, hierarchy, ["usa"])).toThrow(UdcError);
   });
@@ -474,9 +577,18 @@ describe("development cube: US state drill-down", () => {
     const drilled = drilldownCube(missing, hierarchy, "usa");
     expect(drilled.observations).toHaveLength(98);
     for (const r of rollupCube(missing, hierarchy, ["usa"]).observations) {
-      const year = r.coordinate.members.find((m) => m.dimensionId === "year")!.id;
+      const year = r.coordinate.members.find(
+        (m) => m.dimensionId === "year",
+      )!.id;
       const us = expected.find((e) => e.geo === "usa" && e.year === year)!;
-      expect(r.values.population.value).toBeCloseTo(us.pop - Number(stateRows.find((s) => s.geo === "NY" && s.year === year)!.population), 3);
+      expect(r.values.population.value).toBeCloseTo(
+        us.pop -
+          Number(
+            stateRows.find((s) => s.geo === "NY" && s.year === year)!
+              .population,
+          ),
+        3,
+      );
       expect(r.values.population.contributors).toHaveLength(49);
     }
   });
