@@ -3,8 +3,8 @@
 The query API composes the existing UDC operators without introducing a SQL
 parser, evaluation of expression strings, a network loader, or a database.
 The syntax is inspired by Cube's semantic JSON API and Druid's structured
-arithmetic. The host supplies an authorized semantic catalog and immutable
-canonical source cubes.
+arithmetic. The host supplies an authorized semantic catalog and an asynchronous
+provider for immutable canonical source cubes.
 
 ```ts
 import {
@@ -12,6 +12,7 @@ import {
   validateQuery,
   planQuery,
   executeQuery,
+  createInMemoryProvider,
 } from "@vizhub/udc";
 
 // gdp and population are revision-pinned CanonicalCubes from the host.
@@ -39,7 +40,7 @@ validateQuery(query);
 const plan = planQuery(query, {
   sources: [describeQuerySource(gdp), describeQuerySource(population)],
 });
-const result = executeQuery(plan, { cubes: [gdp, population] });
+const result = await executeQuery(plan, { provider: createInMemoryProvider([gdp, population]) });
 ```
 
 The same query object can be supplied as JSON after runtime validation.
@@ -48,6 +49,35 @@ measure IDs and ordered operator steps; no rows, executable functions or loaders
 A catalog can be built from metadata without fetching rows. The convenience
 function `describeQuerySource` derives that metadata from an existing canonical
 cube. Each source must have one dataset snapshot with an immutable revision.
+
+## Data providers (UDC 3.0)
+
+`executeQuery` now always returns a promise. Replace
+`executeQuery(plan, { cubes })` with
+`await executeQuery(plan, { provider: createInMemoryProvider(cubes) })`.
+For remote acquisition, implement `DataProvider` instead:
+
+```ts
+import type { DataProvider, QueryPlan } from "@vizhub/udc";
+
+function providerFor(
+  plan: QueryPlan,
+  load: DataProvider["loadSource"],
+): DataProvider {
+  return { sources: plan.sources.map((entry) => entry.source), loadSource: load };
+}
+```
+
+The host must authorize the sources and provide exactly the selected metadata
+and corresponding complete canonical snapshots. Each request includes the
+revision-pinned source, required measure IDs (including hidden dependencies)
+and canonical dimension filters. These are informational hints only: v3
+requires all rows and declared measures at original grain. The single UDC
+engine applies filters, joins, aggregation and projection after acquisition.
+Provider failures reject the query; no partial result or silent truncation.
+The provider and hierarchy inputs must remain immutable during execution.
+UDC neither opens connections nor performs network I/O itself. SQL compilation,
+pushdown, credentials and authorization are outside this release.
 
 ## Query properties
 

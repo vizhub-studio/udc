@@ -8,6 +8,7 @@ import {
   describeQuerySource,
   diceCube,
   executeQuery,
+  createInMemoryProvider,
   filterCube,
   getCellKey,
   integrateCubes,
@@ -141,8 +142,8 @@ function plan(q: QuerySpec, cubes: readonly CanonicalCube[] = [population]) {
     hierarchies: [hierarchy],
   });
 }
-function run(q: QuerySpec, cubes: readonly CanonicalCube[] = [population]) {
-  return executeQuery(plan(q, cubes), { cubes, hierarchies: [hierarchy] });
+async function run(q: QuerySpec, cubes: readonly CanonicalCube[] = [population]) {
+  return executeQuery(plan(q, cubes), { provider: createInMemoryProvider(cubes), hierarchies: [hierarchy] });
 }
 
 describe("declarative query validation", () => {
@@ -221,7 +222,7 @@ describe("declarative query validation", () => {
 });
 
 describe("query planning", () => {
-  it("plans hidden operands, deterministic source order and a JSON round trip", () => {
+  it("plans hidden operands, deterministic source order and a JSON round trip", async () => {
     const a = plan(
       { ...ratioQuery, filters, topN: { measureId: "ratio", n: 1 } },
       [gdp, population],
@@ -240,8 +241,8 @@ describe("query planning", () => {
       "project",
     ]);
     expect(
-      executeQuery(JSON.parse(JSON.stringify(a)), { cubes: [population, gdp] }),
-    ).toEqual(executeQuery(b, { cubes: [gdp, population] }));
+      await executeQuery(JSON.parse(JSON.stringify(a)), { provider: createInMemoryProvider([population, gdp]) }),
+    ).toEqual(await executeQuery(b, { provider: createInMemoryProvider([gdp, population]) }));
   });
   it("fails closed on competing providers, unknown measures and dimensions", () => {
     expect(() =>
@@ -305,34 +306,30 @@ describe("query planning", () => {
       UdcError,
     );
   });
-  it("does not accept tampered plans or changed snapshots and metadata", () => {
+  it("does not accept tampered plans or changed snapshots and metadata", async () => {
     const p = plan(base);
-    expect(() =>
-      executeQuery({ ...p, steps: [] }, { cubes: [population] }),
-    ).toThrow(UdcError);
+    await expect(executeQuery({ ...p, steps: [] }, { provider: createInMemoryProvider([population]) })).rejects.toThrow(UdcError);
     const changed = {
       ...population,
       snapshots: [{ datasetId: "population", revision: "v2" }],
     };
-    expect(() => executeQuery(p, { cubes: [changed] })).toThrow(UdcError);
-    expect(() =>
-      executeQuery(p, {
-        cubes: [{ ...population, concordanceRevisions: ["v2"] }],
-      }),
-    ).toThrow(UdcError);
-    expect(() => executeQuery(p, { cubes: [population, gdp] })).toThrow(
+    await expect(executeQuery(p, { provider: createInMemoryProvider([changed]) })).rejects.toThrow(UdcError);
+    await expect(executeQuery(p, {
+        provider: createInMemoryProvider([{ ...population, concordanceRevisions: ["v2"] }]),
+      })).rejects.toThrow(UdcError);
+    await expect(executeQuery(p, { provider: createInMemoryProvider([population, gdp]) })).rejects.toThrow(
       UdcError,
     );
-    expect(() => executeQuery(p, { cubes: [] })).toThrow(UdcError);
+    await expect(executeQuery(p, { provider: createInMemoryProvider([]) })).rejects.toThrow(UdcError);
   });
 });
 
 describe("query execution", () => {
-  it("selects dimensions, projects measures and preserves atomic lineage", () => {
+  it("selects dimensions, projects measures and preserves atomic lineage", async () => {
     const input = integrateCubes(population, gdp);
     // A single source may have multiple measures but must carry a single snapshot.
     const multi = { ...input, snapshots: population.snapshots };
-    const result = run({ ...base, dimensions: ["time", "space"], filters }, [
+    const result = await run({ ...base, dimensions: ["time", "space"], filters }, [
       multi,
     ]);
     expect(result.dimensions.map((d) => d.id)).toEqual(["time", "space"]);
@@ -345,7 +342,7 @@ describe("query execution", () => {
       );
     }
   });
-  it("golden GDP-per-capita query matches manual operator composition", () => {
+  it("golden GDP-per-capita query matches manual operator composition", async () => {
     const q: QuerySpec = {
       ...ratioQuery,
       filters,
@@ -358,7 +355,7 @@ describe("query execution", () => {
       },
       topN: { measureId: "ratio", n: 1, partitionBy: ["time"] },
     };
-    const actual = run(q, [population, gdp]);
+    const actual = await run(q, [population, gdp]);
     const joined = integrateCubes(
       diceCube(gdp, filters),
       diceCube(population, filters),
@@ -383,8 +380,8 @@ describe("query execution", () => {
     expect(Object.keys(actual.observations[0].values)).toEqual(["ratio"]);
     expect(actual.hierarchyRollups).toEqual(manual.hierarchyRollups);
   });
-  it("aggregates before calculating and retains operand provenance", () => {
-    const actual = run({ ...ratioQuery, dimensions: ["time"], filters }, [
+  it("aggregates before calculating and retains operand provenance", async () => {
+    const actual = await run({ ...ratioQuery, dimensions: ["time"], filters }, [
       population,
       gdp,
     ]);
@@ -399,38 +396,34 @@ describe("query execution", () => {
     );
     expect(actual.observations[0].values.ratio?.value).toBe(1600 / 130);
   });
-  it("uses explicit derived count identity on aggregation", () => {
+  it("uses explicit derived count identity on aggregation", async () => {
     const count = source("countable", populationRows, "countable", "count");
-    const result = run(
+    const result = await run(
       { ...base, dimensions: [], measures: ["countable:count"] },
       [count],
     );
     expect(result.observations[0].values["countable:count"]?.value).toBe(4);
-    expect(() =>
-      run({ ...base, dimensions: [], measures: ["countable"] }, [count]),
-    ).toThrow(UdcError);
+    await expect(run({ ...base, dimensions: [], measures: ["countable"] }, [count])).rejects.toThrow(UdcError);
   });
-  it("does not aggregate an unused non-additive measure", () => {
+  it("does not aggregate an unused non-additive measure", async () => {
     const other = source("unused", populationRows, "unused", "none");
     const combined = {
       ...integrateCubes(population, other),
       snapshots: population.snapshots,
     };
-    const result = run({ ...base, dimensions: [], filters }, [combined]);
+    const result = await run({ ...base, dimensions: [], filters }, [combined]);
     expect(result.observations[0].values.population?.value).toBe(130);
-    expect(() =>
-      run({ ...base, dimensions: [], measures: ["unused"] }, [combined]),
-    ).toThrow(UdcError);
+    await expect(run({ ...base, dimensions: [], measures: ["unused"] }, [combined])).rejects.toThrow(UdcError);
   });
-  it("supports scalar output, empty filters and hidden predicate dependencies", () => {
+  it("supports scalar output, empty filters and hidden predicate dependencies", async () => {
     expect(
-      run({ ...base, dimensions: [] }).observations[0].values.population?.value,
+      (await run({ ...base, dimensions: [] })).observations[0].values.population?.value,
     ).toBe(150);
     expect(
-      run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] })
+      (await run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }))
         .observations,
     ).toEqual([]);
-    const result = run(
+    const result = await run(
       {
         ...base,
         measureFilter: {
@@ -445,7 +438,7 @@ describe("query execution", () => {
     expect(result.observations).toHaveLength(4);
     expect(result.measures.map((m) => m.id)).toEqual(["population"]);
   });
-  it("preserves sparse absence versus present null and honors directional anchor", () => {
+  it("preserves sparse absence versus present null and honors directional anchor", async () => {
     const sparse = source("gdp", [
       ["a", "2020", null],
       ["d", "2020", 1],
@@ -455,7 +448,7 @@ describe("query execution", () => {
       measures: ["population", "gdp"],
       join: "full",
     };
-    const result = run(query, [population, sparse]);
+    const result = await run(query, [population, sparse]);
     expect(result.inputStage).toBe("sparse-integrated");
     expect(result.observations).toHaveLength(6);
     expect(
@@ -464,11 +457,11 @@ describe("query execution", () => {
     expect(
       result.observations.filter((o) => o.values.gdp?.value === null),
     ).toHaveLength(1);
-    const left = run({ ...query, join: "left", joinAnchor: "population" }, [
+    const left = await run({ ...query, join: "left", joinAnchor: "population" }, [
       population,
       sparse,
     ]);
-    const right = run({ ...query, join: "right", joinAnchor: "population" }, [
+    const right = await run({ ...query, join: "right", joinAnchor: "population" }, [
       population,
       sparse,
     ]);
@@ -476,15 +469,13 @@ describe("query execution", () => {
       right.observations.map((o) => o.cellKey),
     );
     expect(left.observations).toHaveLength(5);
-    expect(() =>
-      run({ ...query, dimensions: ["time"] }, [population, sparse]),
-    ).toThrow(UdcError);
-    expect(() => run({ ...query, rollups }, [population, sparse])).toThrow(
+    await expect(run({ ...query, dimensions: ["time"] }, [population, sparse])).rejects.toThrow(UdcError);
+    await expect(run({ ...query, rollups }, [population, sparse])).rejects.toThrow(
       UdcError,
     );
   });
-  it("keeps null ratios unranked and supports partitioned ties", () => {
-    const result = run(
+  it("keeps null ratios unranked and supports partitioned ties", async () => {
+    const result = await run(
       {
         ...ratioQuery,
         topN: {
@@ -500,31 +491,29 @@ describe("query execution", () => {
       20, 30,
     ]);
     expect(
-      run({ ...ratioQuery, topN: { measureId: "ratio", n: 0 } }, [
+      (await run({ ...ratioQuery, topN: { measureId: "ratio", n: 0 } }, [
         population,
         gdp,
-      ]).observations,
+      ])).observations,
     ).toEqual([]);
   });
-  it("rejects malformed source rows before filtering", () => {
+  it("rejects malformed source rows before filtering", async () => {
     const malformed = {
       ...population,
       observations: [...population.observations, population.observations[0]],
     };
-    expect(() =>
-      run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }, [
+    await expect(run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }, [
         malformed,
-      ]),
-    ).toThrow(UdcError);
+      ])).rejects.toThrow(UdcError);
   });
-  it("is invariant to reversed source and row order and does not mutate inputs", () => {
+  it("is invariant to reversed source and row order and does not mutate inputs", async () => {
     const before = JSON.stringify([population, gdp, ratioQuery]);
     const reverse = (cube: CanonicalCube) => ({
       ...cube,
       observations: [...cube.observations].reverse(),
     });
-    expect(run(ratioQuery, [reverse(gdp), reverse(population)])).toEqual(
-      run(ratioQuery, [population, gdp]),
+    expect(await run(ratioQuery, [reverse(gdp), reverse(population)])).toEqual(
+      await run(ratioQuery, [population, gdp]),
     );
     expect(JSON.stringify([population, gdp, ratioQuery])).toBe(before);
   });
@@ -720,7 +709,7 @@ describe("query edge cases and error contracts", () => {
     );
   });
 
-  it("supports constant arithmetic and rejects queries without a source measure", () => {
+  it("supports constant arithmetic and rejects queries without a source measure", async () => {
     const constant = {
       ...ratio,
       expression: { kind: "constant", value: 7 } as const,
@@ -728,7 +717,7 @@ describe("query edge cases and error contracts", () => {
     expect(() =>
       plan({ ...ratioQuery, calculatedMeasures: [constant] }),
     ).toThrow(expect.objectContaining({ code: "UNRESOLVED" }));
-    const result = run({
+    const result = await run({
       ...base,
       measures: ["population", "ratio"],
       calculatedMeasures: [constant],
@@ -742,8 +731,8 @@ describe("query edge cases and error contracts", () => {
     });
   });
 
-  it("resolves all hidden predicate leaves, including negation and ranges", () => {
-    const result = run(
+  it("resolves all hidden predicate leaves, including negation and ranges", async () => {
+    const result = await run(
       {
         ...base,
         measureFilter: {
@@ -779,8 +768,8 @@ describe("query edge cases and error contracts", () => {
     expect(result.measures.map((m) => m.id)).toEqual(["population"]);
   });
 
-  it("applies ranking to a hidden measure before projection", () => {
-    const result = run(
+  it("applies ranking to a hidden measure before projection", async () => {
+    const result = await run(
       {
         ...base,
         topN: {
@@ -801,7 +790,7 @@ describe("query edge cases and error contracts", () => {
     ).toBe(true);
   });
 
-  it("preserves zero, null and absent calculated values through outer joins", () => {
+  it("preserves zero, null and absent calculated values through outer joins", async () => {
     const denominator = source("population", [
       ["a", "2020", 0],
       ["b", "2020", 10],
@@ -815,7 +804,7 @@ describe("query edge cases and error contracts", () => {
       ["e", "2020", 3],
     ]);
     const query: QuerySpec = { ...ratioQuery, join: "full" };
-    const result = run(query, [denominator, numerator]);
+    const result = await run(query, [denominator, numerator]);
     const at = (id: string) =>
       result.observations.find((row) =>
         row.coordinate.members.some(
@@ -834,28 +823,28 @@ describe("query edge cases and error contracts", () => {
       ["isNull", 2],
     ] as const) {
       expect(
-        run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [
+        (await run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [
           denominator,
           numerator,
-        ]).observations,
+        ])).observations,
       ).toHaveLength(expected);
     }
     expect(
-      run({ ...query, topN: { measureId: "ratio", n: 10 } }, [
+      (await run({ ...query, topN: { measureId: "ratio", n: 10 } }, [
         denominator,
         numerator,
-      ]).observations,
+      ])).observations,
     ).toHaveLength(1);
   });
 
-  it("composes weighted averages through a hierarchy and dimension reduction", () => {
+  it("composes weighted averages through a hierarchy and dimension reduction", async () => {
     const average = source(
       "population",
       populationRows,
       "population",
       "average",
     );
-    const result = run({ ...base, dimensions: ["space"], rollups }, [average]);
+    const result = await run({ ...base, dimensions: ["space"], rollups }, [average]);
     const east = result.observations.find(
       (row) => row.coordinate.members[0].id === "east",
     )!;
@@ -866,16 +855,16 @@ describe("query edge cases and error contracts", () => {
     expect(result.hierarchyRollups).toHaveLength(1);
   });
 
-  it("returns empty results with the planned output schema", () => {
+  it("returns empty results with the planned output schema", async () => {
     const empty = source("population", []);
-    const result = run(base, [empty]);
+    const result = await run(base, [empty]);
     expect(result.measures.map((m) => m.id)).toEqual(["population"]);
     expect(result.dimensions.map((d) => d.id)).toEqual(["space", "time"]);
     expect(result.observations).toEqual([]);
     expect(result.snapshots).toEqual(empty.snapshots);
   });
 
-  it("rejects corrupted input coordinates, measure sets and values", () => {
+  it("rejects corrupted input coordinates, measure sets and values", async () => {
     const row = population.observations[0];
     const coordinate = { members: [canonicalMember("space", "a")] };
     const wrongAxis = {
@@ -902,35 +891,27 @@ describe("query edge cases and error contracts", () => {
       },
     ];
     for (const malformed of malformedRows) {
-      expect(() =>
-        run(base, [{ ...population, observations: [malformed as typeof row] }]),
-      ).toThrow(UdcError);
+      await expect(run(base, [{ ...population, observations: [malformed as typeof row] }])).rejects.toThrow(UdcError);
     }
   });
 
-  it("rejects malformed plans and over-budget execution inputs", () => {
+  it("rejects malformed plans and over-budget execution inputs", async () => {
     const p = plan(base);
-    expect(() =>
-      executeQuery({ ...p, version: 2 } as unknown as typeof p, {
-        cubes: [population],
-      }),
-    ).toThrow(expect.objectContaining({ code: "INVALID" }));
-    expect(() =>
-      executeQuery(p, { cubes: [population, gdp, source("third")] }),
-    ).toThrow(expect.objectContaining({ code: "LIMIT" }));
-    expect(() =>
-      executeQuery(p, {
-        cubes: [
+    await expect(executeQuery({ ...p, version: 2 } as unknown as typeof p, {
+        provider: createInMemoryProvider([population]),
+      })).rejects.toThrow(expect.objectContaining({ code: "INVALID" }));
+    await expect(executeQuery(p, { provider: createInMemoryProvider([population, gdp, source("third")]) })).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
+    await expect(executeQuery(p, {
+        provider: createInMemoryProvider([
           {
             ...population,
             observations: Array(10001).fill(population.observations[0]),
           },
-        ],
-      }),
-    ).toThrow(expect.objectContaining({ code: "LIMIT" }));
+        ]),
+      })).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
   });
 
-  it("detaches plan metadata from mutable input objects", () => {
+  it("detaches plan metadata from mutable input objects", async () => {
     const query = { ...base, measures: ["population"] };
     const entry = describeQuerySource(population);
     const p = planQuery(query, { sources: [entry] });
@@ -938,7 +919,7 @@ describe("query edge cases and error contracts", () => {
     entry.snapshot.revision = "v2";
     expect(p.query.measures).toEqual(["population"]);
     expect(p.sources[0].source.snapshot.revision).toBe("v1");
-    expect(executeQuery(p, { cubes: [population] }).observations).toHaveLength(
+    expect((await executeQuery(p, { provider: createInMemoryProvider([population]) })).observations).toHaveLength(
       5,
     );
   });
@@ -977,7 +958,7 @@ describe("query planner and executor coverage boundaries", () => {
     ).toThrow(expect.objectContaining({ code: "CONFLICT" }));
   });
 
-  it("projects multiple measures from a single source in requested order", () => {
+  it("projects multiple measures from a single source in requested order", async () => {
     const multi: CanonicalCube = {
       ...population,
       measures: [...population.measures, ...gdp.measures],
@@ -1000,7 +981,7 @@ describe("query planner and executor coverage boundaries", () => {
       measures: ["population", "gdp"],
       join: "inner",
     };
-    const result = run(query, [multi]);
+    const result = await run(query, [multi]);
     expect(result.measures.map((m) => m.id)).toEqual(query.measures);
     expect(result.observations).toHaveLength(5);
     for (const row of result.observations) {
@@ -1009,12 +990,12 @@ describe("query planner and executor coverage boundaries", () => {
       );
     }
     expect(
-      run(query, [{ ...multi, measures: [...multi.measures].reverse() }]),
+      await run(query, [{ ...multi, measures: [...multi.measures].reverse() }]),
     ).toEqual(result);
   });
 
-  it("accepts repeated member selectors without duplicating observations", () => {
-    const result = run({
+  it("accepts repeated member selectors without duplicating observations", async () => {
+    const result = await run({
       ...base,
       filters: [{ dimensionId: "time", memberIds: ["2020", "2020"] }],
     });
@@ -1029,9 +1010,9 @@ describe("query ordering and limits", () => {
     { kind: "measure", measureId: "population", direction: "desc" },
   ] as const;
 
-  it("orders lexicographically by multiple keys and limits globally", () => {
+  it("orders lexicographically by multiple keys and limits globally", async () => {
     const query: QuerySpec = { ...base, orderBy, limit: 4 };
-    const result = run(query);
+    const result = await run(query);
     expect(result.observations.map((r) => r.values.population?.value)).toEqual([
       90, 30, 10, 20,
     ]);
@@ -1040,28 +1021,28 @@ describe("query ordering and limits", () => {
       ...population,
       observations: [...population.observations].reverse(),
     };
-    expect(run(query, [reversed])).toEqual(result);
+    expect(await run(query, [reversed])).toEqual(result);
     expect(
-      executeQuery(JSON.parse(JSON.stringify(plan(query))), {
-        cubes: [population],
+      await executeQuery(JSON.parse(JSON.stringify(plan(query))), {
+        provider: createInMemoryProvider([population]),
       }),
     ).toEqual(result);
   });
 
-  it("preserves provenance and canonical tie breaking", () => {
+  it("preserves provenance and canonical tie breaking", async () => {
     const tied = source("population", [
       ["b", "2020", 10],
       ["a", "2020", 10],
     ]);
     const query: QuerySpec = { ...base, orderBy: [orderBy[1]] };
-    const result = run(query, [tied]);
-    expect(result.observations).toEqual(run(base, [tied]).observations);
-    expect(run({ ...query, limit: 1 }, [tied]).observations).toEqual(
+    const result = await run(query, [tied]);
+    expect(result.observations).toEqual((await run(base, [tied])).observations);
+    expect((await run({ ...query, limit: 1 }, [tied])).observations).toEqual(
       result.observations.slice(0, 1),
     );
   });
 
-  it("puts numeric values before null and absent in either direction", () => {
+  it("puts numeric values before null and absent in either direction", async () => {
     const sparse = source("gdp", [
       ["a", "2020", null],
       ["d", "2020", 1],
@@ -1074,7 +1055,7 @@ describe("query ordering and limits", () => {
         join: "full",
         orderBy: [{ kind: "measure", measureId: "gdp", direction }],
       };
-      const result = run(query, [population, sparse]);
+      const result = await run(query, [population, sparse]);
       expect(result.observations.map((r) => r.values.gdp?.value)).toEqual([
         ...(direction === "asc" ? [1, 5] : [5, 1]),
         null,
@@ -1087,8 +1068,8 @@ describe("query ordering and limits", () => {
     }
   });
 
-  it("orders after partitioned top-N and limits after sorting", () => {
-    const result = run({
+  it("orders after partitioned top-N and limits after sorting", async () => {
+    const result = await run({
       ...base,
       topN: { measureId: "population", n: 1, partitionBy: ["time"] },
       orderBy: [{ kind: "measure", measureId: "population", direction: "asc" }],
@@ -1099,8 +1080,8 @@ describe("query ordering and limits", () => {
     ]);
   });
 
-  it("sorts calculated measures and aggregated counts at final grain", () => {
-    const result = run(
+  it("sorts calculated measures and aggregated counts at final grain", async () => {
+    const result = await run(
       {
         ...ratioQuery,
         filters,
@@ -1111,7 +1092,7 @@ describe("query ordering and limits", () => {
     );
     expect(result.observations[0].values.ratio?.value).toBe(20);
     const count = source("countable", populationRows, "countable", "count");
-    const counted = run(
+    const counted = await run(
       {
         ...base,
         dimensions: ["time"],
@@ -1127,13 +1108,13 @@ describe("query ordering and limits", () => {
     ).toEqual([1, 3]);
   });
 
-  it("supports zero, omitted and oversized-within-budget limits", () => {
-    expect(run({ ...base, limit: 0 }).observations).toEqual([]);
-    expect(run({ ...base, limit: 0 }).measures).toEqual(run(base).measures);
-    expect(run({ ...base, limit: 100 }).observations).toEqual(
-      run(base).observations,
+  it("supports zero, omitted and oversized-within-budget limits", async () => {
+    expect((await run({ ...base, limit: 0 })).observations).toEqual([]);
+    expect((await run({ ...base, limit: 0 })).measures).toEqual((await run(base)).measures);
+    expect((await run({ ...base, limit: 100 })).observations).toEqual(
+      (await run(base)).observations,
     );
-    expect(run({ ...base, orderBy: [] })).toEqual(run(base));
+    expect(await run({ ...base, orderBy: [] })).toEqual(await run(base));
   });
 
   it.each([
@@ -1149,7 +1130,7 @@ describe("query ordering and limits", () => {
     expect(() => validateQuery(query)).toThrow(UdcError);
   });
 
-  it("rejects hidden sort fields and tampered plans", () => {
+  it("rejects hidden sort fields and tampered plans", async () => {
     expect(() =>
       plan({ ...base, dimensions: ["space"], orderBy: [orderBy[0]] }),
     ).toThrow(UdcError);
@@ -1160,8 +1141,62 @@ describe("query ordering and limits", () => {
       }),
     ).toThrow(UdcError);
     const p = plan({ ...base, orderBy, limit: 1 });
-    expect(() =>
-      executeQuery({ ...p, steps: ["project"] }, { cubes: [population] }),
-    ).toThrow(UdcError);
+    await expect(executeQuery({ ...p, steps: ["project"] }, { provider: createInMemoryProvider([population]) })).rejects.toThrow(UdcError);
+  });
+});
+
+describe("async data providers", () => {
+  it("acquires selected sources asynchronously with dependency and filter hints", async () => {
+    const p = plan({ ...ratioQuery, filters }, [population, gdp]);
+    const requests: string[] = [];
+    const memory = createInMemoryProvider([population, gdp]);
+    const result = await executeQuery(p, {
+      provider: {
+        sources: memory.sources,
+        async loadSource(request) {
+          await Promise.resolve();
+          requests.push(request.source.snapshot.datasetId);
+          expect(request.filters).toEqual(filters);
+          expect(request.measureIds).toEqual(
+            p.sources.find(
+              (entry) =>
+                entry.source.snapshot.datasetId === request.source.snapshot.datasetId,
+            )!.measureIds,
+          );
+          return memory.loadSource(request);
+        },
+      },
+    });
+    expect(requests).toEqual(p.sources.map((s) => s.source.snapshot.datasetId));
+    expect(result).toEqual(await run({ ...ratioQuery, filters }, [population, gdp]));
+  });
+
+  it("rejects tampered plans before acquisition", async () => {
+    let calls = 0;
+    const memory = createInMemoryProvider([population]);
+    await expect(
+      executeQuery({ ...plan(base), steps: [] }, {
+        provider: {
+          sources: memory.sources,
+          async loadSource(request) {
+            calls++;
+            return memory.loadSource(request);
+          },
+        },
+      }),
+    ).rejects.toThrow(UdcError);
+    expect(calls).toBe(0);
+  });
+
+  it("rejects wrong returned snapshots and propagates provider failures", async () => {
+    const p = plan(base);
+    const sources = [describeQuerySource(population)];
+    await expect(executeQuery(p, {
+      provider: { sources, async loadSource() { return gdp; } },
+    })).rejects.toThrow(UdcError);
+    const failure = new Error("remote source unavailable");
+    await expect(executeQuery(p, {
+      provider: { sources, async loadSource() { throw failure; } },
+    })).rejects.toBe(failure);
   });
 });

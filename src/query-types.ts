@@ -78,8 +78,24 @@ export interface QueryPlan {
   sources: readonly QueryPlanSource[];
   steps: readonly QueryStep[];
 }
+/** Source acquisition request. In v3 the selections are hints, not pushdown. */
+export interface QuerySourceRequest extends QueryPlanSource {
+  filters: readonly DiceSelection[];
+}
+
+/**
+ * Host-owned, revision-pinned data acquisition. Supply exactly the sources
+ * selected by the plan. A load must return the complete canonical cube at its
+ * original grain, with every declared measure and provenance; no truncation,
+ * filtering, projection or aggregation is permitted yet.
+ */
+export interface DataProvider {
+  readonly sources: readonly QuerySource[];
+  loadSource(request: QuerySourceRequest): Promise<CanonicalCube>;
+}
+
 export type QueryInputs = {
-  cubes: readonly CanonicalCube[];
+  provider: DataProvider;
   hierarchies?: readonly Hierarchy[];
 };
 type QueryObservation = AnalyticalCube["observations"][number];

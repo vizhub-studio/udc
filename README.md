@@ -43,6 +43,7 @@ import {
   validateQuery,
   planQuery,
   executeQuery,
+  createInMemoryProvider,
 } from "@vizhub/udc";
 import type { QuerySpec } from "@vizhub/udc";
 
@@ -56,7 +57,7 @@ const catalog = { sources: [describeQuerySource(populationCube)] };
 
 validateQuery(query);
 const plan = planQuery(query, catalog);
-const result = executeQuery(plan, { cubes: [populationCube] });
+const result = await executeQuery(plan, { provider: createInMemoryProvider([populationCube]) });
 
 console.log(plan.steps);
 console.log(result.observations);
@@ -64,8 +65,10 @@ console.log(result.observations);
 
 For JSON received from an external caller, use `validateQuery` on the decoded
 value before planning. The planner can operate on catalog metadata alone,
-without loading observation rows. The executor requires exactly the canonical
-source snapshots selected by the plan.
+without loading observation rows. The executor accepts a host-supplied async
+`DataProvider` exposing exactly the snapshots selected by the plan. For local
+cubes use `createInMemoryProvider`. UDC 3.0 has one async execution API; pure
+planning and OLAP operators remain synchronous.
 
 Each result observation contains a canonical coordinate, a cell key, and
 measure values with provenance. For example, extract the country, year and
@@ -143,7 +146,7 @@ const catalog = {
   sources: [describeQuerySource(populationCube), describeQuerySource(gdpCube)],
 };
 const plan = planQuery(query, catalog);
-const result = executeQuery(plan, { cubes: [populationCube, gdpCube] });
+const result = await executeQuery(plan, { provider: createInMemoryProvider([populationCube, gdpCube]) });
 ```
 
 Here and in the subsequent examples, `query` is the corresponding JSON

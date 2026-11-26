@@ -11,6 +11,7 @@ import type {
   QueryPlan,
   QueryResult,
   QueryPlanSource,
+  QuerySourceRequest,
 } from "./query-types";
 import type { CanonicalCube } from "./types";
 
@@ -121,21 +122,22 @@ function compareObservations(
 }
 
 /** Execute only against the revision-pinned inputs in the validated plan. */
-export function executeQuery(
+export async function executeQuery(
   plan: QueryPlan,
   inputs: QueryInputs,
-): QueryResult {
+): Promise<QueryResult> {
   if (!plan || plan.version !== 1 || !Array.isArray(plan.sources))
     throw new UdcError("INVALID", "Invalid query plan");
-  assertBound(inputs.cubes.length, UDC_LIMITS.cubes, "query input cubes");
-  // Rebuild from actual metadata rather than trusting caller-supplied steps or source IDs.
+  const { provider, hierarchies } = inputs;
+  assertBound(provider.sources.length, UDC_LIMITS.cubes, "query input cubes");
+  // Validate against declared metadata before starting any provider I/O.
   const fresh = planQuery(plan.query, {
-    sources: inputs.cubes.map(describeQuerySource),
-    hierarchies: inputs.hierarchies,
+    sources: provider.sources,
+    hierarchies,
   });
   if (
     stableJson(fresh) !== stableJson(plan) ||
-    inputs.cubes.length !== plan.sources.length
+    provider.sources.length !== fresh.sources.length
   )
     throw new UdcError(
       "CONFLICT",
@@ -143,12 +145,21 @@ export function executeQuery(
     );
 
   const query = fresh.query;
-  const sources = fresh.sources.map((selected) => {
-    const cube = inputs.cubes.find(
-      (c) => c.snapshots[0].datasetId === selected.source.snapshot.datasetId,
-    )!;
-    return diceCube(projectSource(cube, selected), query.filters ?? []);
-  });
+  const sources: CanonicalCube[] = [];
+  // Preserve plan order and the existing source bounds. Providers must return
+  // complete canonical snapshots; only this engine applies semantic operators.
+  for (const selected of fresh.sources) {
+    const request = JSON.parse(
+      JSON.stringify({ ...selected, filters: query.filters ?? [] }),
+    ) as QuerySourceRequest;
+    const cube = await provider.loadSource(request);
+    if (stableJson(describeQuerySource(cube)) !== stableJson(selected.source))
+      throw new UdcError(
+        "CONFLICT",
+        "Provider returned different source metadata",
+      );
+    sources.push(diceCube(projectSource(cube, selected), query.filters ?? []));
+  }
   let cube: AnalyticalCube =
     sources.length === 1
       ? sources[0]
@@ -156,7 +167,7 @@ export function executeQuery(
   for (const rollup of query.rollups ?? []) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
       throw new UdcError("INCOMPATIBLE", "Rollup requires dense input");
-    const hierarchy = inputs.hierarchies!.find(
+    const hierarchy = hierarchies!.find(
       (h) => h.key === rollup.hierarchyKey && h.revision === rollup.revision,
     )!;
     cube = rollupCube(cube, hierarchy, rollup.targetMembers);

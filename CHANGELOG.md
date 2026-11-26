@@ -1,5 +1,12 @@
 # Change log
 
+## 3.0.0 — asynchronous data providers (unreleased)
+
+- Breaking: `executeQuery` returns `Promise<QueryResult>` and accepts `{ provider, hierarchies? }` instead of `{ cubes, hierarchies? }`.
+- Add `DataProvider`, `QuerySourceRequest`, and `createInMemoryProvider`. Metadata-only planning and pure OLAP operations remain synchronous; there is no legacy synchronous executor.
+- Verify the exact plan before acquisition and recheck the returned source metadata before applying existing operators. Preserve revision pins, row limits and lineage.
+- Providers return full canonical snapshots. No SQL, pushdown, driver, authentication or npm publication in this PR.
+
 ## Unreleased — declarative JSON queries
 
 - Add a versioned semantic QuerySpec, bounded JSON validation, deterministic source planning, and execution through existing OLAP operators.
