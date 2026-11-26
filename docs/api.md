@@ -24,7 +24,7 @@ All documented functions and types are exported from `@vizhub/udc` and `src/inde
 
 Exported types include `CanonicalCoordinateDataset`, `DatasetCoverageCoordinate`, `ProjectedDatasetCoverage`, `DatasetCoverageObservation`, `DatasetCoverageSummary`, `JoinMode`, `OuterJoinMode`, `SparseIntegratedObservation`, `SparseIntegratedCube`, `DatasetSnapshot`, `Dimension`, `Codelist`, `CodedMemberRef`, `Member`, `MemberRef`, `Coordinate`, `CellKey`, `DimensionFieldMapping`, `AggregationOperator`, `MeasureDefinition`, `MeasureFieldMapping`, `SemanticSchema`, `MeasureProvenance`, `MeasureValue`, `Observation`, `CubeBase`, `SourceCube`, `CanonicalCube`, `AggregateAccumulator`, `AggregatedMeasureValue`, `AggregatedObservation`, `AggregatedCube`, `Relationship`, `CodeMapping`, `Resolution`, `Concordance`, `ConcordanceContext`, `IntegrationOptions`, `UdcErrorCode`, `HierarchyDefinition`, `HierarchyEdgeInput`, `HierarchyEdge`, `HierarchyProvenance`, and `Hierarchy`.
 
-`SemanticSchema` maps input columns to explicit `DimensionFieldMapping` and `MeasureFieldMapping` definitions. `MeasureDefinition` carries an ID, name, mandatory canonical unit and mandatory `aggregation: "sum" | "count" | "average" | "none"` declaration; each field mapping carries a scale. UDC does not infer column semantics.
+`SemanticSchema` maps input columns to explicit `DimensionFieldMapping` and `MeasureFieldMapping` definitions. `MeasureDefinition` carries an ID, name, mandatory canonical unit and mandatory `aggregation: "sum" | "count" | "average" | "none" | "min" | "max"` declaration; each field mapping carries a scale. UDC does not infer column semantics.
 
 The `Resolution` result of a concordance has distinct `resolved`, `unresolved` and `conflict` statuses. Do not treat failure as an inferred match.
 
@@ -69,3 +69,5 @@ The advanced exports `drilldownCube`, `filterCube`, `rankCube`, `topNCube`, `Ana
 - `executeQuery(plan, inputs)`: asynchronously acquire the selected sources, verify revision pins, and return a `Promise<QueryResult>`; `inputs.provider` is required.
 
 See [query language](query-language.md) for fields, execution order, and limits.
+
+`AggregationOverride` selects a base measure and an explicit operator for a query reduction. `AggregateAccumulator.extremum` is required for `min`/`max` states (null for zero non-null inputs); `sum` is zero in these states. Other accumulator shapes are unchanged. `SourcePushdownCapabilities.aggregateOperators` optionally advertises exact operator support.

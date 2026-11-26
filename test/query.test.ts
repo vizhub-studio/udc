@@ -2222,3 +2222,104 @@ describe("composable calculated measures", () => {
     expect(requests[0].pushdown.aggregateDimensions).toEqual([]);
   });
 });
+
+describe("explicit aggregation overrides and extrema", () => {
+  it.each([
+    ["sum", 150],
+    ["average", 37.5],
+    ["min", 10],
+    ["max", 90],
+    ["count", 4],
+  ] as const)("overrides none with %s without mutating source metadata", async (operator, expected) => {
+    const data = source("m", populationRows, "m", "none");
+    const id = operator === "count" ? "m:count" : "m";
+    const q: QuerySpec = {
+      version: 1, dimensions: [], measures: [id],
+      aggregationOverrides: [{ measureId: "m", operator }],
+    };
+    const result = await run(q, [data]);
+    expect(result.observations[0].values[id]?.value).toBe(expected);
+    expect(result.measures[0].aggregation).toBe(operator === "count" ? "sum" : operator);
+    expect(data.measures[0].aggregation).toBe("none");
+    expect(result.observations[0].values[id]).toMatchObject({
+      contributors: expect.arrayContaining([expect.objectContaining({ measureId: "m", sourceRow: 5 })]),
+    });
+  });
+
+  it("preserves defaults and supports overriding count with max", async () => {
+    const data = source("m", populationRows, "m", "count");
+    const q: QuerySpec = { version: 1, dimensions: [], measures: ["m:count"] };
+    expect((await run(q, [data])).observations[0].values["m:count"]?.value).toBe(4);
+    expect((await run({ ...q, measures: ["m"], aggregationOverrides: [{ measureId: "m", operator: "max" }] }, [data])).observations[0].values.m?.value).toBe(90);
+    await expect(run({ ...q, aggregationOverrides: [{ measureId: "m", operator: "max" }] }, [data])).rejects.toThrow(UdcError);
+  });
+
+  it("allows explicit none to prohibit multi-row reduction", async () => {
+    const q: QuerySpec = { ...base, dimensions: [], aggregationOverrides: [{ measureId: "population", operator: "none" }] };
+    await expect(run(q)).rejects.toThrow(UdcError);
+  });
+
+  it("rejects duplicate, unknown, malformed, calculated and ineffective overrides before loading", () => {
+    const q: QuerySpec = { ...base, dimensions: [] };
+    for (const aggregationOverrides of [
+      [{ measureId: "population", operator: "median" }],
+      [{ measureId: "population", operator: "max", extra: true }],
+      [{ measureId: "population", operator: "min" }, { measureId: "population", operator: "max" }],
+      [{ measureId: "missing", operator: "max" }],
+    ]) {
+      expect(() => plan({ ...q, aggregationOverrides } as QuerySpec)).toThrow(UdcError);
+    }
+    expect(() => plan({ ...base, aggregationOverrides: [{ measureId: "population", operator: "max" }] })).toThrow(UdcError);
+    expect(() => plan({ ...ratioQuery, dimensions: [], aggregationOverrides: [{ measureId: "ratio", operator: "max" }] }, [population, gdp])).toThrow(UdcError);
+  });
+
+  it("composes hierarchy rollup, reduction, N-way integration and calculated measures", async () => {
+    const extra = source("emissions", populationRows.map(([a,b,v]) => [a,b,v === null ? null : v * 2] as const));
+    const q: QuerySpec = {
+      version: 1, dimensions: ["space"], rollups,
+      measures: ["ratio", "emissions"], calculatedMeasures: [ratio],
+      aggregationOverrides: [
+        { measureId: "population", operator: "max" },
+        { measureId: "emissions", operator: "min" },
+      ],
+    };
+    const result = await run(q, [population, gdp, extra]);
+    const east = result.observations.find((o) => o.coordinate.members[0].id === "east")!;
+    expect(east.values.ratio?.value).toBe(2000 / 30);
+    expect(east.values.emissions?.value).toBe(20);
+    expect(east.values.ratio).toBeDefined();
+  });
+
+  it.each(["min", "max"] as const)("negotiates %s pushdown and retains legacy fallback", async (operator) => {
+    const data = source("m", populationRows, "m", operator);
+    const q: QuerySpec = { version: 1, dimensions: [], measures: ["m"], filters };
+    const expected = await run(q, [data]);
+    for (const supported of [false, true]) {
+      const requests: SourcePushdownRequest[] = [];
+      const provider = pushdownProvider([data], { filter: true, project: true, aggregate: true, ...(supported ? { aggregateOperators: [operator] } : {}) }, requests);
+      expect(await executeQuery(plan(q, [data]), { provider })).toEqual(expected);
+      expect(requests[0].pushdown.aggregateDimensions).toEqual(supported ? [] : undefined);
+    }
+    const override: QuerySpec = { ...q, aggregationOverrides: [{ measureId: "m", operator: operator === "min" ? "max" : "min" }] };
+    const requests: SourcePushdownRequest[] = [];
+    const provider = pushdownProvider([data], { filter: true, project: true, aggregate: true, aggregateOperators: ["min", "max"] }, requests);
+    expect(await executeQuery(plan(override, [data]), { provider })).toEqual(await run(override, [data]));
+    expect(requests[0].pushdown.aggregateDimensions).toBeUndefined();
+    expect(requests[0].source.measures[0].aggregation).toBe(operator);
+  });
+
+  it("rejects malformed pushed extrema rather than trusting their value", async () => {
+    const data = source("m", populationRows, "m", "max");
+    const q: QuerySpec = { version: 1, dimensions: [], measures: ["m"] };
+    const provider = pushdownProvider([data], { aggregate: true, aggregateOperators: ["max"] }, []);
+    const load = provider.pushdown!.load.bind(provider.pushdown);
+    provider.pushdown!.load = async (request) => {
+      const result = await load(request);
+      if (result.kind !== "aggregate") throw Error("Expected aggregate");
+      return { kind: "aggregate", cube: { ...result.cube, observations: result.cube.observations.map((row) => ({
+        ...row, values: { m: { ...row.values.m, state: { sum: 0, count: 4, extremum: 123 } } },
+      })) } };
+    };
+    await expect(executeQuery(plan(q, [data]), { provider })).rejects.toThrow(UdcError);
+  });
+});

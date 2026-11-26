@@ -18,6 +18,7 @@ export function planSourcePushdown(
     capabilities.project === true ? selected.measureIds : allMeasures;
   const canAggregate =
     capabilities.aggregate === true &&
+    !plan.query.aggregationOverrides?.length &&
     plan.sources.length === 1 &&
     plan.steps.includes("aggregate") &&
     !plan.steps.includes("rollup") &&
@@ -25,7 +26,11 @@ export function planSourcePushdown(
     measureIds.length === selected.measureIds.length &&
     selected.source.measures
       .filter((m) => measureIds.includes(m.id))
-      .every((m) => m.aggregation !== "none");
+      .every(
+        (m) =>
+          m.aggregation !== "none" &&
+          (capabilities.aggregateOperators ?? ["sum", "count", "average"]).includes(m.aggregation),
+      );
   if (
     !canAggregate &&
     !filters.length &&

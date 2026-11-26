@@ -42,14 +42,14 @@ export interface DimensionFieldMapping {
   codelist: Codelist;
 }
 /** An explicit roll-up rule for non-null measure values. */
-export type AggregationOperator = "sum" | "count" | "average" | "none";
+export type AggregationOperator = "sum" | "count" | "average" | "none" | "min" | "max";
 
 export interface MeasureDefinition {
   id: string;
   name: string;
   /** Canonical unit at the declared observation grain. */
   unit: string;
-  /** Required; none means roll-up is explicitly prohibited. */
+  /** Default roll-up policy; none prohibits roll-up unless explicitly overridden by a query. */
   aggregation: AggregationOperator;
 }
 export interface MeasureFieldMapping {
@@ -183,8 +183,11 @@ export interface DatasetCoverageSummary {
 
 /** Reusable sufficient statistics for compositional roll-ups. */
 export interface AggregateAccumulator {
+  /** Zero for min/max, which do not need a sum. */
   sum: number;
   count: number;
+  /** Required for min/max: null iff count is zero. */
+  extremum?: number | null;
 }
 /** Versioned hierarchy evidence actually used by one roll-up. */
 export interface HierarchyRollupEvidence {

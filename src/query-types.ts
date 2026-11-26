@@ -1,4 +1,5 @@
 import type {
+  AggregationOperator,
   CanonicalCube,
   AggregatedCube,
   DatasetSnapshot,
@@ -29,11 +30,18 @@ export type QueryOrder =
   | { kind: "dimension"; dimensionId: string; direction: "asc" | "desc" }
   | { kind: "measure"; measureId: string; direction: "asc" | "desc" };
 
+/** Override the default aggregation for one selected base measure. */
+export interface AggregationOverride {
+  measureId: string;
+  operator: AggregationOperator;
+}
+
 /** A JSON-only semantic request. No physical source names or executable code. */
 export interface QuerySpec {
   version: 1;
   dimensions: readonly string[];
   measures: readonly string[];
+  aggregationOverrides?: readonly AggregationOverride[];
   filters?: readonly DiceSelection[];
   rollups?: readonly QueryRollup[];
   calculatedMeasures?: readonly CalculatedMeasureDefinition[];
@@ -102,6 +110,8 @@ export interface SourcePushdownCapabilities {
   filter?: boolean;
   project?: boolean;
   aggregate?: boolean;
+  /** Explicit operator support; omitted means legacy sum/count/average only. */
+  aggregateOperators?: readonly AggregationOperator[];
 }
 
 /** Exact source operation contract; no physical names or backend syntax. */

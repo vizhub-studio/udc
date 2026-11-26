@@ -35,7 +35,7 @@ export function validateSemanticSchema(
     assertId(mapping.measure.id, "measure");
     assertId(mapping.measure.unit, "unit");
     if (
-      !["sum", "count", "average", "none"].includes(mapping.measure.aggregation)
+      !["sum", "count", "average", "none", "min", "max"].includes(mapping.measure.aggregation)
     )
       throw new UdcError("INVALID", "Invalid or missing aggregation operator");
     if (!mapping.measure.name.trim())

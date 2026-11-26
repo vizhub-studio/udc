@@ -16,6 +16,7 @@ type InputCube = CanonicalCube | AggregatedCube;
 interface MutableValue {
   sum: number;
   count: number;
+  extremum: number | null;
   contributors: MeasureProvenance[];
 }
 interface MutableGroup {
@@ -76,7 +77,7 @@ export function aggregateByCoordinate(
   const outputMeasures: MeasureDefinition[] = cube.measures.map((measure) => {
     assertId(measure.id, "measure");
     assertId(measure.unit, "measure unit");
-    if (!["sum", "count", "average", "none"].includes(measure.aggregation))
+    if (!["sum", "count", "average", "none", "min", "max"].includes(measure.aggregation))
       throw new UdcError("INVALID", "Invalid aggregation operator");
     if (original.has(measure.id))
       throw new UdcError("DUPLICATE", "Duplicate measure identity");
@@ -129,7 +130,7 @@ export function aggregateByCoordinate(
     if (!group) {
       group = { coordinate, cellKey, rows: 0, values: new Map() };
       for (const measure of cube.measures) {
-        group.values.set(measure.id, { sum: 0, count: 0, contributors: [] });
+        group.values.set(measure.id, { sum: 0, count: 0, extremum: null, contributors: [] });
       }
       groups.set(cellKey, group);
     }
@@ -138,6 +139,8 @@ export function aggregateByCoordinate(
       const input = observation.values[measure.id];
       if (!input) throw new UdcError("INCOMPATIBLE", "Missing measure value");
       const accumulator = group.values.get(measure.id)!;
+      const isExtremum = measure.aggregation === "min" || measure.aggregation === "max";
+      let extremum: number | null = null;
       let sum: number;
       let count: number;
       let sources: readonly MeasureProvenance[];
@@ -147,12 +150,21 @@ export function aggregateByCoordinate(
           throw new UdcError("INVALID", "Invalid aggregate state");
         sum = aggregate.state.sum;
         count = aggregate.state.count;
+        if (isExtremum) {
+          const candidate = aggregate.state.extremum;
+          if (sum !== 0 || candidate === undefined ||
+            (count === 0 ? candidate !== null : typeof candidate !== "number" || !Number.isFinite(candidate)) ||
+            aggregate.value !== candidate)
+            throw new UdcError("INVALID", "Invalid extremum accumulator");
+          extremum = candidate;
+        }
         sources = aggregate.contributors;
       } else {
         const atomic = input as MeasureValue;
         if (atomic.value !== null && !Number.isFinite(atomic.value))
           throw new UdcError("INVALID", "Non-finite measure value");
-        sum = atomic.value ?? 0;
+        sum = isExtremum ? 0 : (atomic.value ?? 0);
+        if (isExtremum) extremum = atomic.value;
         count = atomic.value === null ? 0 : 1;
         if (!atomic.provenance)
           throw new UdcError("INVALID", "Missing measure provenance");
@@ -161,6 +173,13 @@ export function aggregateByCoordinate(
       if (!Number.isFinite(sum) || !Number.isSafeInteger(count) || count < 0)
         throw new UdcError("INVALID", "Invalid aggregate accumulator");
       accumulator.sum += sum;
+      if (isExtremum && extremum !== null) {
+        accumulator.extremum = accumulator.extremum === null
+          ? extremum
+          : measure.aggregation === "min"
+            ? Math.min(accumulator.extremum, extremum)
+            : Math.max(accumulator.extremum, extremum);
+      }
       accumulator.count += count;
       if (
         !Number.isFinite(accumulator.sum) ||
@@ -188,14 +207,17 @@ export function aggregateByCoordinate(
           "INCOMPATIBLE",
           "Non-additive measure cannot roll up",
         );
+      const isExtremum = measure.aggregation === "min" || measure.aggregation === "max";
       const value =
         measure.aggregation === "count"
           ? accumulator.count
           : accumulator.count === 0
             ? null
-            : measure.aggregation === "average"
-              ? accumulator.sum / accumulator.count
-              : accumulator.sum;
+            : isExtremum
+              ? accumulator.extremum
+              : measure.aggregation === "average"
+                ? accumulator.sum / accumulator.count
+                : accumulator.sum;
       if (value !== null && !Number.isFinite(value))
         throw new UdcError("LIMIT", "Aggregate value overflow");
       values[derived.id] = {
@@ -203,7 +225,11 @@ export function aggregateByCoordinate(
         state:
           measure.aggregation === "count"
             ? { sum: accumulator.count, count: 1 }
-            : { sum: accumulator.sum, count: accumulator.count },
+            : {
+                sum: accumulator.sum,
+                count: accumulator.count,
+                ...(isExtremum ? { extremum: accumulator.extremum } : {}),
+              },
         contributors: accumulator.contributors,
       };
     }
