@@ -320,7 +320,9 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     const plan = planQuery(decoded, {
       sources: cubes.map(describeQuerySource),
     });
-    return executeQuery(JSON.parse(JSON.stringify(plan)), { provider: createInMemoryProvider(cubes) });
+    return executeQuery(JSON.parse(JSON.stringify(plan)), {
+      provider: createInMemoryProvider(cubes),
+    });
   }
 
   it("discovers both hidden operands and matches every independently joined CSV observation and source row", async () => {
@@ -405,7 +407,9 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     };
     const plan = planQuery(query, { sources: cubes.map(describeQuerySource) });
     expect(plan.sources.map((s) => s.source.snapshot)).toEqual([un]);
-    const result = await executeQuery(plan, { provider: createInMemoryProvider([cubes[0]]) });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider([cubes[0]]),
+    });
     expect(result.observations).toHaveLength(2);
     for (const row of result.observations) {
       const year = row.coordinate.members[0].id;
@@ -414,7 +418,9 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
         .reduce((sum, e) => sum + e.population, 0);
       expect(row.values.population?.value).toBeCloseTo(total, 4);
     }
-    await expect(executeQuery(plan, { provider: createInMemoryProvider(cubes) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(plan, { provider: createInMemoryProvider(cubes) }),
+    ).rejects.toThrow(UdcError);
   });
 
   it("calculates regional ratios of totals with explicit hierarchy and contributor evidence", async () => {
@@ -452,7 +458,10 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       sources: cubes.map(describeQuerySource),
       hierarchies: [hierarchy],
     });
-    const result = await executeQuery(plan, { provider: createInMemoryProvider(cubes), hierarchies: [hierarchy] });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider(cubes),
+      hierarchies: [hierarchy],
+    });
     expect(result.observations).toHaveLength(4);
     expect(result.hierarchyRollups).toHaveLength(1);
     for (const row of result.observations) {
@@ -575,9 +584,9 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(Object.hasOwn(missing.values, "gdp-per-capita")).toBe(false);
     expect(missing.presence).toBeDefined();
     expect((await run(ratioQuery, cubes)).observations).toHaveLength(5);
-    await expect(run({ ...query, dimensions: ["year"] }, cubes)).rejects.toThrow(
-      UdcError,
-    );
+    await expect(
+      run({ ...query, dimensions: ["year"] }, cubes),
+    ).rejects.toThrow(UdcError);
   });
 
   it("round-trips JSON, is deterministic for reordered canonical observations, and rejects stale revisions", async () => {
@@ -593,9 +602,13 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
     expect(
       planQuery(ratioQuery, { sources: reordered.map(describeQuerySource) }),
     ).toEqual(plan);
-    const result = await executeQuery(plan, { provider: createInMemoryProvider(cubes) });
+    const result = await executeQuery(plan, {
+      provider: createInMemoryProvider(cubes),
+    });
     expect(
-      await executeQuery(JSON.parse(JSON.stringify(plan)), { provider: createInMemoryProvider(reordered) }),
+      await executeQuery(JSON.parse(JSON.stringify(plan)), {
+        provider: createInMemoryProvider(reordered),
+      }),
     ).toEqual(result);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
     expect(JSON.stringify(cubes)).toBe(before);
@@ -603,6 +616,8 @@ describe("real-world declarative queries over historical CSV fixtures", () => {
       popRows.map((row) => ({ ...row })),
       gdpRows,
     );
-    await expect(executeQuery(plan, { provider: createInMemoryProvider(revised) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(plan, { provider: createInMemoryProvider(revised) }),
+    ).rejects.toThrow(UdcError);
   });
 });

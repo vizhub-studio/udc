@@ -40,7 +40,9 @@ validateQuery(query);
 const plan = planQuery(query, {
   sources: [describeQuerySource(gdp), describeQuerySource(population)],
 });
-const result = await executeQuery(plan, { provider: createInMemoryProvider([gdp, population]) });
+const result = await executeQuery(plan, {
+  provider: createInMemoryProvider([gdp, population]),
+});
 ```
 
 The same query object can be supplied as JSON after runtime validation.
@@ -64,7 +66,10 @@ function providerFor(
   plan: QueryPlan,
   load: DataProvider["loadSource"],
 ): DataProvider {
-  return { sources: plan.sources.map((entry) => entry.source), loadSource: load };
+  return {
+    sources: plan.sources.map((entry) => entry.source),
+    loadSource: load,
+  };
 }
 ```
 

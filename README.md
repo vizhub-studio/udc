@@ -57,7 +57,9 @@ const catalog = { sources: [describeQuerySource(populationCube)] };
 
 validateQuery(query);
 const plan = planQuery(query, catalog);
-const result = await executeQuery(plan, { provider: createInMemoryProvider([populationCube]) });
+const result = await executeQuery(plan, {
+  provider: createInMemoryProvider([populationCube]),
+});
 
 console.log(plan.steps);
 console.log(result.observations);
@@ -146,7 +148,9 @@ const catalog = {
   sources: [describeQuerySource(populationCube), describeQuerySource(gdpCube)],
 };
 const plan = planQuery(query, catalog);
-const result = await executeQuery(plan, { provider: createInMemoryProvider([populationCube, gdpCube]) });
+const result = await executeQuery(plan, {
+  provider: createInMemoryProvider([populationCube, gdpCube]),
+});
 ```
 
 Here and in the subsequent examples, `query` is the corresponding JSON

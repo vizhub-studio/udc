@@ -142,8 +142,14 @@ function plan(q: QuerySpec, cubes: readonly CanonicalCube[] = [population]) {
     hierarchies: [hierarchy],
   });
 }
-async function run(q: QuerySpec, cubes: readonly CanonicalCube[] = [population]) {
-  return executeQuery(plan(q, cubes), { provider: createInMemoryProvider(cubes), hierarchies: [hierarchy] });
+async function run(
+  q: QuerySpec,
+  cubes: readonly CanonicalCube[] = [population],
+) {
+  return executeQuery(plan(q, cubes), {
+    provider: createInMemoryProvider(cubes),
+    hierarchies: [hierarchy],
+  });
 }
 
 describe("declarative query validation", () => {
@@ -241,8 +247,14 @@ describe("query planning", () => {
       "project",
     ]);
     expect(
-      await executeQuery(JSON.parse(JSON.stringify(a)), { provider: createInMemoryProvider([population, gdp]) }),
-    ).toEqual(await executeQuery(b, { provider: createInMemoryProvider([gdp, population]) }));
+      await executeQuery(JSON.parse(JSON.stringify(a)), {
+        provider: createInMemoryProvider([population, gdp]),
+      }),
+    ).toEqual(
+      await executeQuery(b, {
+        provider: createInMemoryProvider([gdp, population]),
+      }),
+    );
   });
   it("fails closed on competing providers, unknown measures and dimensions", () => {
     expect(() =>
@@ -308,19 +320,32 @@ describe("query planning", () => {
   });
   it("does not accept tampered plans or changed snapshots and metadata", async () => {
     const p = plan(base);
-    await expect(executeQuery({ ...p, steps: [] }, { provider: createInMemoryProvider([population]) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(
+        { ...p, steps: [] },
+        { provider: createInMemoryProvider([population]) },
+      ),
+    ).rejects.toThrow(UdcError);
     const changed = {
       ...population,
       snapshots: [{ datasetId: "population", revision: "v2" }],
     };
-    await expect(executeQuery(p, { provider: createInMemoryProvider([changed]) })).rejects.toThrow(UdcError);
-    await expect(executeQuery(p, {
-        provider: createInMemoryProvider([{ ...population, concordanceRevisions: ["v2"] }]),
-      })).rejects.toThrow(UdcError);
-    await expect(executeQuery(p, { provider: createInMemoryProvider([population, gdp]) })).rejects.toThrow(
-      UdcError,
-    );
-    await expect(executeQuery(p, { provider: createInMemoryProvider([]) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, { provider: createInMemoryProvider([changed]) }),
+    ).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, {
+        provider: createInMemoryProvider([
+          { ...population, concordanceRevisions: ["v2"] },
+        ]),
+      }),
+    ).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, { provider: createInMemoryProvider([population, gdp]) }),
+    ).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, { provider: createInMemoryProvider([]) }),
+    ).rejects.toThrow(UdcError);
   });
 });
 
@@ -329,9 +354,10 @@ describe("query execution", () => {
     const input = integrateCubes(population, gdp);
     // A single source may have multiple measures but must carry a single snapshot.
     const multi = { ...input, snapshots: population.snapshots };
-    const result = await run({ ...base, dimensions: ["time", "space"], filters }, [
-      multi,
-    ]);
+    const result = await run(
+      { ...base, dimensions: ["time", "space"], filters },
+      [multi],
+    );
     expect(result.dimensions.map((d) => d.id)).toEqual(["time", "space"]);
     expect(result.observations).toHaveLength(3);
     for (const row of result.observations) {
@@ -403,7 +429,9 @@ describe("query execution", () => {
       [count],
     );
     expect(result.observations[0].values["countable:count"]?.value).toBe(4);
-    await expect(run({ ...base, dimensions: [], measures: ["countable"] }, [count])).rejects.toThrow(UdcError);
+    await expect(
+      run({ ...base, dimensions: [], measures: ["countable"] }, [count]),
+    ).rejects.toThrow(UdcError);
   });
   it("does not aggregate an unused non-additive measure", async () => {
     const other = source("unused", populationRows, "unused", "none");
@@ -413,15 +441,22 @@ describe("query execution", () => {
     };
     const result = await run({ ...base, dimensions: [], filters }, [combined]);
     expect(result.observations[0].values.population?.value).toBe(130);
-    await expect(run({ ...base, dimensions: [], measures: ["unused"] }, [combined])).rejects.toThrow(UdcError);
+    await expect(
+      run({ ...base, dimensions: [], measures: ["unused"] }, [combined]),
+    ).rejects.toThrow(UdcError);
   });
   it("supports scalar output, empty filters and hidden predicate dependencies", async () => {
     expect(
-      (await run({ ...base, dimensions: [] })).observations[0].values.population?.value,
+      (await run({ ...base, dimensions: [] })).observations[0].values.population
+        ?.value,
     ).toBe(150);
     expect(
-      (await run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }))
-        .observations,
+      (
+        await run({
+          ...base,
+          filters: [{ dimensionId: "time", memberIds: [] }],
+        })
+      ).observations,
     ).toEqual([]);
     const result = await run(
       {
@@ -457,22 +492,24 @@ describe("query execution", () => {
     expect(
       result.observations.filter((o) => o.values.gdp?.value === null),
     ).toHaveLength(1);
-    const left = await run({ ...query, join: "left", joinAnchor: "population" }, [
-      population,
-      sparse,
-    ]);
-    const right = await run({ ...query, join: "right", joinAnchor: "population" }, [
-      population,
-      sparse,
-    ]);
+    const left = await run(
+      { ...query, join: "left", joinAnchor: "population" },
+      [population, sparse],
+    );
+    const right = await run(
+      { ...query, join: "right", joinAnchor: "population" },
+      [population, sparse],
+    );
     expect(left.observations.map((o) => o.cellKey)).toEqual(
       right.observations.map((o) => o.cellKey),
     );
     expect(left.observations).toHaveLength(5);
-    await expect(run({ ...query, dimensions: ["time"] }, [population, sparse])).rejects.toThrow(UdcError);
-    await expect(run({ ...query, rollups }, [population, sparse])).rejects.toThrow(
-      UdcError,
-    );
+    await expect(
+      run({ ...query, dimensions: ["time"] }, [population, sparse]),
+    ).rejects.toThrow(UdcError);
+    await expect(
+      run({ ...query, rollups }, [population, sparse]),
+    ).rejects.toThrow(UdcError);
   });
   it("keeps null ratios unranked and supports partitioned ties", async () => {
     const result = await run(
@@ -491,10 +528,12 @@ describe("query execution", () => {
       20, 30,
     ]);
     expect(
-      (await run({ ...ratioQuery, topN: { measureId: "ratio", n: 0 } }, [
-        population,
-        gdp,
-      ])).observations,
+      (
+        await run({ ...ratioQuery, topN: { measureId: "ratio", n: 0 } }, [
+          population,
+          gdp,
+        ])
+      ).observations,
     ).toEqual([]);
   });
   it("rejects malformed source rows before filtering", async () => {
@@ -502,9 +541,11 @@ describe("query execution", () => {
       ...population,
       observations: [...population.observations, population.observations[0]],
     };
-    await expect(run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }, [
+    await expect(
+      run({ ...base, filters: [{ dimensionId: "time", memberIds: [] }] }, [
         malformed,
-      ])).rejects.toThrow(UdcError);
+      ]),
+    ).rejects.toThrow(UdcError);
   });
   it("is invariant to reversed source and row order and does not mutate inputs", async () => {
     const before = JSON.stringify([population, gdp, ratioQuery]);
@@ -823,17 +864,21 @@ describe("query edge cases and error contracts", () => {
       ["isNull", 2],
     ] as const) {
       expect(
-        (await run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [
-          denominator,
-          numerator,
-        ])).observations,
+        (
+          await run({ ...query, measureFilter: { kind, measureId: "ratio" } }, [
+            denominator,
+            numerator,
+          ])
+        ).observations,
       ).toHaveLength(expected);
     }
     expect(
-      (await run({ ...query, topN: { measureId: "ratio", n: 10 } }, [
-        denominator,
-        numerator,
-      ])).observations,
+      (
+        await run({ ...query, topN: { measureId: "ratio", n: 10 } }, [
+          denominator,
+          numerator,
+        ])
+      ).observations,
     ).toHaveLength(1);
   });
 
@@ -844,7 +889,9 @@ describe("query edge cases and error contracts", () => {
       "population",
       "average",
     );
-    const result = await run({ ...base, dimensions: ["space"], rollups }, [average]);
+    const result = await run({ ...base, dimensions: ["space"], rollups }, [
+      average,
+    ]);
     const east = result.observations.find(
       (row) => row.coordinate.members[0].id === "east",
     )!;
@@ -891,24 +938,34 @@ describe("query edge cases and error contracts", () => {
       },
     ];
     for (const malformed of malformedRows) {
-      await expect(run(base, [{ ...population, observations: [malformed as typeof row] }])).rejects.toThrow(UdcError);
+      await expect(
+        run(base, [{ ...population, observations: [malformed as typeof row] }]),
+      ).rejects.toThrow(UdcError);
     }
   });
 
   it("rejects malformed plans and over-budget execution inputs", async () => {
     const p = plan(base);
-    await expect(executeQuery({ ...p, version: 2 } as unknown as typeof p, {
+    await expect(
+      executeQuery({ ...p, version: 2 } as unknown as typeof p, {
         provider: createInMemoryProvider([population]),
-      })).rejects.toThrow(expect.objectContaining({ code: "INVALID" }));
-    await expect(executeQuery(p, { provider: createInMemoryProvider([population, gdp, source("third")]) })).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
-    await expect(executeQuery(p, {
+      }),
+    ).rejects.toThrow(expect.objectContaining({ code: "INVALID" }));
+    await expect(
+      executeQuery(p, {
+        provider: createInMemoryProvider([population, gdp, source("third")]),
+      }),
+    ).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
+    await expect(
+      executeQuery(p, {
         provider: createInMemoryProvider([
           {
             ...population,
             observations: Array(10001).fill(population.observations[0]),
           },
         ]),
-      })).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
+      }),
+    ).rejects.toThrow(expect.objectContaining({ code: "LIMIT" }));
   });
 
   it("detaches plan metadata from mutable input objects", async () => {
@@ -919,9 +976,13 @@ describe("query edge cases and error contracts", () => {
     entry.snapshot.revision = "v2";
     expect(p.query.measures).toEqual(["population"]);
     expect(p.sources[0].source.snapshot.revision).toBe("v1");
-    expect((await executeQuery(p, { provider: createInMemoryProvider([population]) })).observations).toHaveLength(
-      5,
-    );
+    expect(
+      (
+        await executeQuery(p, {
+          provider: createInMemoryProvider([population]),
+        })
+      ).observations,
+    ).toHaveLength(5);
   });
 });
 
@@ -1110,7 +1171,9 @@ describe("query ordering and limits", () => {
 
   it("supports zero, omitted and oversized-within-budget limits", async () => {
     expect((await run({ ...base, limit: 0 })).observations).toEqual([]);
-    expect((await run({ ...base, limit: 0 })).measures).toEqual((await run(base)).measures);
+    expect((await run({ ...base, limit: 0 })).measures).toEqual(
+      (await run(base)).measures,
+    );
     expect((await run({ ...base, limit: 100 })).observations).toEqual(
       (await run(base)).observations,
     );
@@ -1141,7 +1204,12 @@ describe("query ordering and limits", () => {
       }),
     ).toThrow(UdcError);
     const p = plan({ ...base, orderBy, limit: 1 });
-    await expect(executeQuery({ ...p, steps: ["project"] }, { provider: createInMemoryProvider([population]) })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(
+        { ...p, steps: ["project"] },
+        { provider: createInMemoryProvider([population]) },
+      ),
+    ).rejects.toThrow(UdcError);
   });
 });
 
@@ -1160,7 +1228,8 @@ describe("async data providers", () => {
           expect(request.measureIds).toEqual(
             p.sources.find(
               (entry) =>
-                entry.source.snapshot.datasetId === request.source.snapshot.datasetId,
+                entry.source.snapshot.datasetId ===
+                request.source.snapshot.datasetId,
             )!.measureIds,
           );
           return memory.loadSource(request);
@@ -1168,22 +1237,27 @@ describe("async data providers", () => {
       },
     });
     expect(requests).toEqual(p.sources.map((s) => s.source.snapshot.datasetId));
-    expect(result).toEqual(await run({ ...ratioQuery, filters }, [population, gdp]));
+    expect(result).toEqual(
+      await run({ ...ratioQuery, filters }, [population, gdp]),
+    );
   });
 
   it("rejects tampered plans before acquisition", async () => {
     let calls = 0;
     const memory = createInMemoryProvider([population]);
     await expect(
-      executeQuery({ ...plan(base), steps: [] }, {
-        provider: {
-          sources: memory.sources,
-          async loadSource(request) {
-            calls++;
-            return memory.loadSource(request);
+      executeQuery(
+        { ...plan(base), steps: [] },
+        {
+          provider: {
+            sources: memory.sources,
+            async loadSource(request) {
+              calls++;
+              return memory.loadSource(request);
+            },
           },
         },
-      }),
+      ),
     ).rejects.toThrow(UdcError);
     expect(calls).toBe(0);
   });
@@ -1191,12 +1265,26 @@ describe("async data providers", () => {
   it("rejects wrong returned snapshots and propagates provider failures", async () => {
     const p = plan(base);
     const sources = [describeQuerySource(population)];
-    await expect(executeQuery(p, {
-      provider: { sources, async loadSource() { return gdp; } },
-    })).rejects.toThrow(UdcError);
+    await expect(
+      executeQuery(p, {
+        provider: {
+          sources,
+          async loadSource() {
+            return gdp;
+          },
+        },
+      }),
+    ).rejects.toThrow(UdcError);
     const failure = new Error("remote source unavailable");
-    await expect(executeQuery(p, {
-      provider: { sources, async loadSource() { throw failure; } },
-    })).rejects.toBe(failure);
+    await expect(
+      executeQuery(p, {
+        provider: {
+          sources,
+          async loadSource() {
+            throw failure;
+          },
+        },
+      }),
+    ).rejects.toBe(failure);
   });
 });

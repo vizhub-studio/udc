@@ -18,7 +18,10 @@ export function createInMemoryProvider(
           cube.snapshots[0].revision === source.snapshot.revision,
       );
       if (matches.length !== 1)
-        throw new UdcError("CONFLICT", "Source snapshot not uniquely available");
+        throw new UdcError(
+          "CONFLICT",
+          "Source snapshot not uniquely available",
+        );
       return matches[0];
     },
   };
