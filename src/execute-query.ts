@@ -318,7 +318,11 @@ export async function executeQuery(
     inputRows += cube.observations.length;
     inputValues += cube.observations.length * cube.measures.length;
     assertBound(inputRows, UDC_LIMITS.integrationInputRows, "query input rows");
-    assertBound(inputValues, UDC_LIMITS.integrationInputValues, "query input values");
+    assertBound(
+      inputValues,
+      UDC_LIMITS.integrationInputValues,
+      "query input values",
+    );
   };
   // Preserve plan order. Only opt-in providers can return planned subsets.
   for (const selected of fresh.sources) {

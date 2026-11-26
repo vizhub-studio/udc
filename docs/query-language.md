@@ -110,20 +110,20 @@ The provider and hierarchy inputs must remain immutable during execution.
 
 ## Query properties
 
-| Field              | Meaning                                                                                   |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| version            | Required literal 1                                                                        |
-| dimensions         | Retained axes, in output order; [] requests scalar grain                                  |
-| measures           | Nonempty requested output measures, in output order                                       |
-| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration       |
-| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis        |
+| Field              | Meaning                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| version            | Required literal 1                                                                                       |
+| dimensions         | Retained axes, in output order; [] requests scalar grain                                                 |
+| measures           | Nonempty requested output measures, in output order                                                      |
+| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration                      |
+| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis                       |
 | calculatedMeasures | Multiple CalculatedMeasureDefinitions with acyclic dependencies, evaluated after rollups and aggregation |
-| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                             |
-| join               | inner (default), full, left or right                                                      |
-| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source    |
-| topN               | Existing TopNOptions, partitioned on retained axes                                        |
-| orderBy            | Ordered dimension or measure keys from the requested output                               |
-| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                  |
+| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                                            |
+| join               | inner (default), full, left or right                                                                     |
+| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source                   |
+| topN               | Existing TopNOptions, partitioned on retained axes                                                       |
+| orderBy            | Ordered dimension or measure keys from the requested output                                              |
+| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                                 |
 
 All identifiers are canonical semantic IDs. Dimension ranges are not inferred
 from IDs; enumerate canonical members explicitly. Numeric comparisons, ranges,

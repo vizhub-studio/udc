@@ -237,7 +237,10 @@ export function integrateManyCubes(
       throw new UdcError("CONFLICT", "Duplicate source dataset");
     datasetIds.add(snapshot.datasetId);
     if (JSON.stringify(dimIds(cube)) !== grain)
-      throw new UdcError("INCOMPATIBLE", "Dimensions or granularity incompatible");
+      throw new UdcError(
+        "INCOMPATIBLE",
+        "Dimensions or granularity incompatible",
+      );
     for (const measure of cube.measures) {
       if (measureIds.has(measure.id))
         throw new UdcError("CONFLICT", "Duplicate measure identity");
@@ -252,7 +255,11 @@ export function integrateManyCubes(
     for (const index of indexes) {
       for (const key of index.keys()) {
         keys.add(key);
-        assertBound(keys.size, UDC_LIMITS.outputObservations, "integrated observations");
+        assertBound(
+          keys.size,
+          UDC_LIMITS.outputObservations,
+          "integrated observations",
+        );
       }
     }
   } else {
@@ -261,14 +268,22 @@ export function integrateManyCubes(
         keys.add(key);
     }
   }
-  assertBound(keys.size, UDC_LIMITS.outputObservations, "integrated observations");
+  assertBound(
+    keys.size,
+    UDC_LIMITS.outputObservations,
+    "integrated observations",
+  );
 
   const shared = {
     dimensions: [...first.dimensions].sort((a, b) => stable(a.id, b.id)),
     measures: cubes.flatMap((cube) => cube.measures),
     snapshots: cubes.flatMap((cube) => cube.snapshots),
-    schemaRevisions: [...new Set(cubes.flatMap((cube) => cube.schemaRevisions))].sort(stable),
-    concordanceRevisions: [...new Set(cubes.flatMap((cube) => cube.concordanceRevisions))].sort(stable),
+    schemaRevisions: [
+      ...new Set(cubes.flatMap((cube) => cube.schemaRevisions)),
+    ].sort(stable),
+    concordanceRevisions: [
+      ...new Set(cubes.flatMap((cube) => cube.concordanceRevisions)),
+    ].sort(stable),
   };
   const observations = [...keys].sort(stable).map((key) => {
     const rows = indexes.map((index) => index.get(key));

@@ -206,7 +206,8 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
       (s) => s.source.snapshot.datasetId === anchor,
     )!;
     const others = planSources.filter((s) => s !== preserved);
-    planSources = join === "left" ? [preserved, ...others] : [...others, preserved];
+    planSources =
+      join === "left" ? [preserved, ...others] : [...others, preserved];
   }
   const rawIds = planSources.flatMap((s) => s.measureIds);
   assertBound(rawIds.length, UDC_LIMITS.columns, "selected source measures");
@@ -228,7 +229,11 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
     outputIds.some((id) => calculatedIds.has(id))
   )
     fail("CONFLICT", "Derived measure identity collision");
-  assertBound(outputIds.length + calculations.length, UDC_LIMITS.columns, "intermediate measures");
+  assertBound(
+    outputIds.length + calculations.length,
+    UDC_LIMITS.columns,
+    "intermediate measures",
+  );
   const steps: QueryStep[] = [];
   if (query.filters?.length) steps.push("filter-dimensions");
   if (planSources.length > 1) steps.push("integrate");

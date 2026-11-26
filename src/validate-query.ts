@@ -184,7 +184,11 @@ export function validateQuery(value: unknown): asserts value is QuerySpec {
       nodes = 0;
       expression(d.expression, 1);
       totalNodes += nodes;
-      assertBound(totalNodes, UDC_LIMITS.calculationExpressionNodes, "calculation expression nodes");
+      assertBound(
+        totalNodes,
+        UDC_LIMITS.calculationExpressionNodes,
+        "calculation expression nodes",
+      );
     }
   }
   nodes = 0;

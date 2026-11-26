@@ -233,7 +233,11 @@ export function planCalculatedMeasures(
 } {
   if (!Array.isArray(definitions))
     throw new UdcError("INVALID", "Invalid calculated measures");
-  assertBound(definitions.length, UDC_LIMITS.calculatedMeasures, "calculated measures");
+  assertBound(
+    definitions.length,
+    UDC_LIMITS.calculatedMeasures,
+    "calculated measures",
+  );
   const byId = new Map<string, CalculatedMeasureDefinition>();
   const references = new Map<string, string[]>();
   let expressionNodes = 0;
@@ -252,7 +256,11 @@ export function planCalculatedMeasures(
     function validate(expr: MeasureExpression, depth: number): void {
       assertBound(depth, 32, "expression depth");
       assertBound(++nodes, 100, "expression nodes");
-      assertBound(++expressionNodes, UDC_LIMITS.calculationExpressionNodes, "calculation expression nodes");
+      assertBound(
+        ++expressionNodes,
+        UDC_LIMITS.calculationExpressionNodes,
+        "calculation expression nodes",
+      );
       if (!expr || typeof expr !== "object")
         throw new UdcError("INVALID", "Invalid expression");
       if (expr.kind === "constant") {
@@ -313,11 +321,13 @@ export function calculateMeasures(
 ): CalculatedCube {
   queryCube(cube);
   if (!["canonical", "aggregated", "sparse-integrated"].includes(cube.stage))
-    throw new UdcError("INCOMPATIBLE", "Calculation requires a pre-calculated input");
+    throw new UdcError(
+      "INCOMPATIBLE",
+      "Calculation requires a pre-calculated input",
+    );
   const { order, baseRefs, references, expressionNodes } =
     planCalculatedMeasures(definitions);
-  if (!order.length)
-    throw new UdcError("INVALID", "Empty calculated measures");
+  if (!order.length) throw new UdcError("INVALID", "Empty calculated measures");
   const measures = new Set(cube.measures.map((measure) => measure.id));
   for (const definition of order)
     if (measures.has(definition.id))
@@ -325,20 +335,40 @@ export function calculateMeasures(
   for (const id of baseRefs)
     if (!measures.has(id))
       throw new UdcError("UNRESOLVED", "Unknown expression measure: " + id);
-  assertBound(cube.measures.length + order.length, UDC_LIMITS.columns, "output measures");
-  assertBound(cube.observations.length * expressionNodes, UDC_LIMITS.calculationWork, "calculation work");
+  assertBound(
+    cube.measures.length + order.length,
+    UDC_LIMITS.columns,
+    "output measures",
+  );
+  assertBound(
+    cube.observations.length * expressionNodes,
+    UDC_LIMITS.calculationWork,
+    "calculation work",
+  );
   let contributorCount = 0;
   const account = (n: number) => {
     contributorCount += n;
-    assertBound(contributorCount, UDC_LIMITS.calculationContributors, "calculation contributors");
+    assertBound(
+      contributorCount,
+      UDC_LIMITS.calculationContributors,
+      "calculation contributors",
+    );
   };
   const observations: CalculatedObservation[] = cube.observations.map(
     (observation) => {
-      const values: Partial<Record<string, MeasureValue | AggregatedMeasureValue | CalculatedMeasureValue>> = {
+      const values: Partial<
+        Record<
+          string,
+          MeasureValue | AggregatedMeasureValue | CalculatedMeasureValue
+        >
+      > = {
         ...observation.values,
       };
       for (const definition of order) {
-        const inputs: { measureId: string; contributors: readonly MeasureProvenance[] }[] = [];
+        const inputs: {
+          measureId: string;
+          contributors: readonly MeasureProvenance[];
+        }[] = [];
         let absent = false;
         for (const id of references.get(definition.id)!) {
           const value = Object.hasOwn(values, id) ? values[id] : undefined;
@@ -365,7 +395,8 @@ export function calculateMeasures(
               }
             contributors = [...unique];
           } else {
-            contributors = "contributors" in value ? value.contributors : [value.provenance];
+            contributors =
+              "contributors" in value ? value.contributors : [value.provenance];
             account(contributors.length);
           }
           inputs.push({ measureId: id, contributors });
@@ -378,21 +409,33 @@ export function calculateMeasures(
           if (a === null || b === null || (expr.operator === "/" && b === 0))
             return null;
           const result =
-            expr.operator === "+" ? a + b :
-            expr.operator === "-" ? a - b :
-            expr.operator === "*" ? a * b : a / b;
+            expr.operator === "+"
+              ? a + b
+              : expr.operator === "-"
+                ? a - b
+                : expr.operator === "*"
+                  ? a * b
+                  : a / b;
           if (!Number.isFinite(result))
             throw new UdcError("LIMIT", "Calculated value overflow");
           return result;
         }
-        values[definition.id] = { value: evaluate(definition.expression), inputs };
+        values[definition.id] = {
+          value: evaluate(definition.expression),
+          inputs,
+        };
       }
       return { ...observation, values };
     },
   );
-  const detached = JSON.parse(JSON.stringify(order)) as CalculatedMeasureDefinition[];
+  const detached = JSON.parse(
+    JSON.stringify(order),
+  ) as CalculatedMeasureDefinition[];
   const calculated: MeasureDefinition[] = order.map(({ id, name, unit }) => ({
-    id, name, unit, aggregation: "none",
+    id,
+    name,
+    unit,
+    aggregation: "none",
   }));
   return {
     ...cube,

@@ -6,21 +6,21 @@ UDC is a typed, fixture-tested **virtual cube core**, not a complete online anal
 
 The imported `UDC_LIMITS` are deliberately conservative:
 
-| Budget                                 |   Value |
-| -------------------------------------- | ------: |
-| Selected sources / measures            |     100 |
-| Cumulative integration input rows       | 100,000 |
-| Cumulative integration input values     | 1,000,000 |
-| Rows per source cube                   |  10,000 |
-| Columns per source                     |     100 |
-| Output observations                    |  10,000 |
-| Calculated measure definitions         |     100 |
-| Cumulative calculation expression nodes |   1,000 |
-| Row-expression node operations         | 10,000,000 |
-| Calculation contributor entries        | 1,000,000 |
-| Projected datasets per coverage query  |   1,000 |
-| Projected coordinate contributions     | 100,000 |
-| Coverage summary coordinates           |  20,000 |
+| Budget                                  |      Value |
+| --------------------------------------- | ---------: |
+| Selected sources / measures             |        100 |
+| Cumulative integration input rows       |    100,000 |
+| Cumulative integration input values     |  1,000,000 |
+| Rows per source cube                    |     10,000 |
+| Columns per source                      |        100 |
+| Output observations                     |     10,000 |
+| Calculated measure definitions          |        100 |
+| Cumulative calculation expression nodes |      1,000 |
+| Row-expression node operations          | 10,000,000 |
+| Calculation contributor entries         |  1,000,000 |
+| Projected datasets per coverage query   |      1,000 |
+| Projected coordinate contributions      |    100,000 |
+| Coverage summary coordinates            |     20,000 |
 
 Core operations reject over-budget row/column counts rather than silently truncating. File byte limits and CSV/TSV parsing belong to callers. These limits are not a streaming guarantee or protection from all potentially expensive workloads.
 
