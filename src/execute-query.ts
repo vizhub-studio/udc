@@ -134,11 +134,16 @@ function validatePushedAggregate(
     measures: [...measures].sort((a, b) => compareKey(a.id, b.id)),
   };
   if (
-    stableJson(describeQuerySource({ ...cube, stage: "canonical", observations: [] })) !==
-    stableJson(expected)
+    stableJson(
+      describeQuerySource({ ...cube, stage: "canonical", observations: [] }),
+    ) !== stableJson(expected)
   )
     throw new UdcError("CONFLICT", "Pushed aggregate metadata mismatch");
-  assertBound(cube.observations.length, UDC_LIMITS.outputObservations, "aggregate rows");
+  assertBound(
+    cube.observations.length,
+    UDC_LIMITS.outputObservations,
+    "aggregate rows",
+  );
   const groups = new Set<string>();
   const sourceRows = new Set<number>();
   for (const row of cube.observations) {
@@ -148,10 +153,15 @@ function validatePushedAggregate(
       groups.has(row.cellKey) ||
       members.length !== dimensions.length ||
       new Set(members.map((m) => m.dimensionId)).size !== dimensions.length ||
-      members.some((m) => m.kind !== "canonical" || !dimensions.includes(m.dimensionId)) ||
+      members.some(
+        (m) => m.kind !== "canonical" || !dimensions.includes(m.dimensionId),
+      ) ||
       Object.keys(row.values).length !== measures.length
     )
-      throw new UdcError("INVALID", "Invalid pushed aggregate coordinate or measures");
+      throw new UdcError(
+        "INVALID",
+        "Invalid pushed aggregate coordinate or measures",
+      );
     groups.add(row.cellKey);
     // Every measure has lineage for the same original rows, including nulls.
     let groupRows: Set<number> | undefined;
@@ -159,7 +169,10 @@ function validatePushedAggregate(
       const raw = original[i];
       const value = row.values[measure.id];
       if (!value || !value.state || !Array.isArray(value.contributors))
-        throw new UdcError("INVALID", "Missing pushed aggregate state or lineage");
+        throw new UdcError(
+          "INVALID",
+          "Missing pushed aggregate state or lineage",
+        );
       const { sum, count } = value.state;
       const contributors = value.contributors;
       assertBound(contributors.length, UDC_LIMITS.rows, "aggregate lineage");
@@ -183,9 +196,15 @@ function validatePushedAggregate(
       if (
         value.value !== expectedValue ||
         (raw.aggregation === "count" &&
-          (count !== 1 || !Number.isSafeInteger(sum) || sum < 0 || sum > contributors.length))
+          (count !== 1 ||
+            !Number.isSafeInteger(sum) ||
+            sum < 0 ||
+            sum > contributors.length))
       )
-        throw new UdcError("INVALID", "Pushed value disagrees with accumulator");
+        throw new UdcError(
+          "INVALID",
+          "Pushed value disagrees with accumulator",
+        );
       const rows = new Set<number>();
       for (const p of contributors) {
         if (
@@ -202,13 +221,22 @@ function validatePushedAggregate(
         rows.add(p.sourceRow);
       }
       if (groupRows) {
-        if (rows.size !== groupRows.size || [...rows].some((id) => !groupRows!.has(id)))
-          throw new UdcError("INVALID", "Pushed measures disagree on contributing rows");
+        if (
+          rows.size !== groupRows.size ||
+          [...rows].some((id) => !groupRows!.has(id))
+        )
+          throw new UdcError(
+            "INVALID",
+            "Pushed measures disagree on contributing rows",
+          );
       } else {
         groupRows = rows;
         for (const id of rows) {
           if (sourceRows.has(id))
-            throw new UdcError("INVALID", "Pushed aggregate repeats source row");
+            throw new UdcError(
+              "INVALID",
+              "Pushed aggregate repeats source row",
+            );
           sourceRows.add(id);
         }
         assertBound(sourceRows.size, UDC_LIMITS.rows, "aggregate source rows");
@@ -298,13 +326,30 @@ export async function executeQuery(
       );
       if (pushdown) {
         // The provider cannot mutate the executor's expected operation.
-        const result = await adapter.load(JSON.parse(JSON.stringify({ ...request, pushdown })));
-        if (result.kind === "subset" && pushdown.aggregateDimensions === undefined) {
-          sources.push(diceCube(subsetSource(result.cube, selected, pushdown), query.filters ?? []));
+        const result = await adapter.load(
+          JSON.parse(JSON.stringify({ ...request, pushdown })),
+        );
+        if (
+          result.kind === "subset" &&
+          pushdown.aggregateDimensions === undefined
+        ) {
+          sources.push(
+            diceCube(
+              subsetSource(result.cube, selected, pushdown),
+              query.filters ?? [],
+            ),
+          );
           continue;
         }
-        if (result.kind === "aggregate" && pushdown.aggregateDimensions !== undefined) {
-          pushedAggregate = validatePushedAggregate(result.cube, selected, pushdown);
+        if (
+          result.kind === "aggregate" &&
+          pushdown.aggregateDimensions !== undefined
+        ) {
+          pushedAggregate = validatePushedAggregate(
+            result.cube,
+            selected,
+            pushdown,
+          );
           continue;
         }
         if (result.kind !== "unsupported")
@@ -323,7 +368,9 @@ export async function executeQuery(
     pushedAggregate ??
     (sources.length === 1
       ? sources[0]
-      : integrateCubes(sources[0], sources[1], { join: query.join ?? "inner" }));
+      : integrateCubes(sources[0], sources[1], {
+          join: query.join ?? "inner",
+        }));
   for (const rollup of query.rollups ?? []) {
     if (cube.stage !== "canonical" && cube.stage !== "aggregated")
       throw new UdcError("INCOMPATIBLE", "Rollup requires dense input");

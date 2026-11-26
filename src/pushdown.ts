@@ -12,7 +12,8 @@ export function planSourcePushdown(
   capabilities: SourcePushdownCapabilities,
 ): SourcePushdownPlan | undefined {
   const allMeasures = selected.source.measures.map((m) => m.id);
-  const filters = capabilities.filter === true ? (plan.query.filters ?? []) : [];
+  const filters =
+    capabilities.filter === true ? (plan.query.filters ?? []) : [];
   const measureIds =
     capabilities.project === true ? selected.measureIds : allMeasures;
   const canAggregate =

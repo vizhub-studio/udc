@@ -46,6 +46,7 @@
   "module": "./dist/index.js",
   "scripts": {
     "build": "tsup",
+    "upgrade": "ncu -u --reject typescript",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src test tsup.config.ts vitest.config.ts",
     "test": "vitest run",
@@ -64,7 +65,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/d3-dsv": "^3.0.7",
-    "@types/node": "^26.6.10",
+    "@types/node": "^26.6.11",
     "d3-dsv": "^3.0.2",
     "eslint": "^10.15.0",
     "prettier": "^3.10.1",
