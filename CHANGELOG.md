@@ -1,5 +1,11 @@
 # Change log
 
+## Unreleased — six-dataset development acceptance
+
+- Exercise five country-grain sources and a separate fictional US state-grain dataset, including real historical population, GDP and rounded CO2 observations.
+- Check independent numerical references, transitive provenance, hierarchy drill-down and reconciliation, extrema overrides, missingness and filter/project provider parity.
+- Document fixture attribution, limitations and the next minor release gate. No production dependencies or publication.
+
 ## Unreleased — explicit aggregation overrides and extrema
 
 - Add query-local base-measure aggregation overrides and min/max default policies.
