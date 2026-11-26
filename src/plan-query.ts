@@ -147,7 +147,7 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
     if (!query.dimensions.includes(axis))
       fail("INCOMPATIBLE", "Rollup axis must be retained");
     if (hierarchyAxes.has(axis))
-      fail("DUPLICATE", "Multiple hierarchy operations on one axis");
+      fail("DUPLICATE", "Multiple rollups on one axis");
     hierarchyAxes.add(axis);
     requiredAxes.add(axis);
   }
@@ -231,10 +231,13 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   const aggregate = !same(grain, query.dimensions);
   const hierarchyReduction = hierarchyAxes.size > 0;
   const join = query.join ?? "inner";
-  if (join !== "inner" && (planSources.length < 2 || aggregate || hierarchyReduction))
+  if (
+    join !== "inner" &&
+    (planSources.length < 2 || aggregate || hierarchyReduction)
+  )
     fail(
       "INCOMPATIBLE",
-      "Outer joins require at least two sources and unchanged grain",
+      "Outer joins require at least two sources and unchanged grain (no rollups)",
     );
   if (query.joinAnchor) {
     const anchor = providers.get(query.joinAnchor);
