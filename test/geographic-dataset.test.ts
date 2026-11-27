@@ -271,9 +271,9 @@ describe("geographic dataset canonicalization", () => {
     ]);
   });
 
-  it.each([true, {}, [], 3.14, Infinity, Number.MAX_SAFE_INTEGER + 1, "x\n", "x".repeat(257)])(
-    "diagnoses invalid identifier %s",
-    (id) => {
+  it.each([true, {}, [], 3.14, Infinity, Number.MAX_SAFE_INTEGER + 1, "x\n", "x".repeat(257)].map((id) => ({ id })))(
+    "diagnoses invalid identifier $id",
+    ({ id }) => {
       const result = canonicalize(geo(id));
       expect(result.diagnostics[0].kind).toBe("invalid-identifier");
       expect(result.collections[0].geometries).toEqual([]);
