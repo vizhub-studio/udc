@@ -704,9 +704,9 @@ describe("declarative drill-down", () => {
     const missing = stateCube(stateRows.filter((row) => row.geo !== "NY"));
     const result = await run(query, [missing]);
     expect(result.observations).toHaveLength(98);
-    expect(result.observations.some((r) => member(r, "geo") === "state:NY")).toBe(
-      false,
-    );
+    expect(
+      result.observations.some((r) => member(r, "geo") === "state:NY"),
+    ).toBe(false);
     const empty = await run(
       { ...query, filters: [{ dimensionId: "year", memberIds: [] }] },
       [missing],
