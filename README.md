@@ -319,6 +319,79 @@ Application consumers can install `@vizhub/udc` from npm and import its named
 functions. This README describes the 3.1.0 source baseline; check the registry
 version before choosing a package version.
 
+
+## Geographic datasets
+
+UDC can associate statistical query results with geographic members without
+decoding geometry. Pass an already-parsed GeoJSON FeatureCollection or TopoJSON
+Topology, a versioned mapping schema, a pinned dataset snapshot and an existing
+concordance. No additional dependencies or spatial operations are required.
+
+```ts
+import {
+  canonicalizeGeographicDataset,
+  associateGeographicQuery,
+  type GeographicDatasetSchema,
+} from "@vizhub/udc";
+
+const schema: GeographicDatasetSchema = {
+  id: "world-boundaries",
+  revision: "v1",
+  format: "topojson",
+  collections: [
+    {
+      collection: "countries",
+      dimension: { id: "country", name: "Country" },
+      codelist: { id: "iso-3166-numeric", revision: "v1" },
+      identifier: { kind: "id" },
+    },
+  ],
+};
+
+// atlas is a parsed TopoJSON document; concordance is the host's approved
+// exact mapping from geographic codes to canonical country members.
+const geography = canonicalizeGeographicDataset(
+  atlas,
+  schema,
+  { datasetId: "world-atlas", revision: "2020" },
+  concordance,
+);
+
+// result is a QueryResult retaining the country dimension.
+const association = associateGeographicQuery(result, geography, "countries");
+```
+
+Use `format: "geojson"` and `collection: "features"` for a GeoJSON
+FeatureCollection. TopoJSON supports multiple named objects, including
+GeometryCollections and singleton geometries. Each collection can have its own
+dimension, code list, and identifier accessor. Use
+`identifier: { kind: "property", property: "GEOID" }` to read a named feature
+or geometry property instead of its ID.
+
+String identifiers are preserved verbatim (including leading zeros); safe
+integer identifiers become decimal strings without padding. Only verified,
+exact canonical mappings resolve. Missing, invalid, unresolved, conflicting
+and duplicate identifiers are reported in diagnostics with collection and
+zero-based source index. Duplicate canonical members retain all references;
+callers may reject duplicates or intentionally render multiple geometries.
+
+Each resolved reference retains the coded member, canonical member, mapping
+revisions, collection name, and zero-based index into the source collection.
+A singleton TopoJSON object has index zero. Dataset, schema and concordance
+revisions are retained at the dataset level. References are only meaningful
+against the original immutable snapshot; geometry is not copied or decoded.
+
+Association preserves query observations and their measure provenance, including
+multiple years for a member and observations with no geometry (empty reference
+arrays). Resolved geometries without a matching observation appear in
+`unmatchedGeometries`. Unresolved features remain visible in dataset diagnostics.
+Unknown collections or queries missing the geographic dimension fail explicitly.
+Association does not introduce measures, infer geographic hierarchies, dissolve
+boundaries, or change the OLAP query language. The host owns fetching,
+authorization, geographic validation, rendering and progressive delivery.
+Collection counts and cumulative entry/association counts are bounded by the
+existing UDC column and coverage limits.
+
 ## Quick start
 
 UDC accepts structured rows, not raw CSV/TSV files. Parsing is the caller's responsibility; the published library has no production dependencies.

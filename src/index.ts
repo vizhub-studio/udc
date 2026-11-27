@@ -18,3 +18,4 @@ export * from "./plan-query";
 export * from "./execute-query";
 export * from "./data-provider";
 export * from "./pushdown";
+export * from "./geographic-dataset";
