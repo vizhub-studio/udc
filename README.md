@@ -120,9 +120,19 @@ Keep only the year dimension to sum population across observed countries:
 ```
 
 Omitted axes are aggregated according to each measure's declared policy
-(`sum`, `count`, `average`, or `none`). The empty dimensions array requests
+(`sum`, `count`, `average`, `none`, `min`, or `max`). The empty dimensions array requests
 a scalar result. A count aggregation uses the explicit output identity
-`measure-id:count`.
+`measure-id:count`. Queries may override a base measure's default for a
+reduction using `aggregationOverrides`, for example:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["country"],
+  "measures": ["population"],
+  "aggregationOverrides": [{ "measureId": "population", "operator": "max" }]
+}
+```
 
 Aggregation is over observations present in the selected data, not a guarantee
 of complete global coverage. Avoid mixing country and pre-aggregated regional
@@ -275,9 +285,10 @@ rather than being guessed or silently corrected.
 
 The v1 query API supports multiple selected source cubes at identical canonical
 grain and multiple composable calculated measures. Source, measure, cumulative input and output
-budgets apply. It does not load data, authorize access, convert units, infer hierarchy
+budgets apply. It does not fetch data on its own, authorize access, convert units, infer hierarchy
 relationships or support sorting by hidden fields. The host
-must supply authorized, immutable inputs and compatible units. Drill-down and
+must supply authorized, immutable inputs and compatible units. Declarative
+hierarchy drill-down is supported with explicitly supplied finer-grained sources;
 coverage queries remain available through the lower-level operators.
 
 Read the [complete query language reference](docs/query-language.md) for every
@@ -300,8 +311,13 @@ npm run example
 ```
 
 The example loads bundled historical sample CSVs for UN population, World Bank GDP, and country-code concordances, then validates, plans, and executes declarative queries for joined observations and ranked GDP per capita. No VizHub server or credentials are required. The [CSV integration tests](test/golden.test.ts) independently join the original rows and verify numerical results, source lineage, regional ratios of totals, missingness, and JSON round-trips. The fixtures and illustrative hierarchy are test evidence, not live or officially approved data.
+The six-dataset development acceptance suite also checks five country-grain
+sources and a fictional 50-state dataset, including national reconciliation,
+explicit aggregation overrides, and low-level and declarative hierarchy drill-down.
 
-After npm publication, application consumers can install `@vizhub/udc` and import its named functions.
+Application consumers can install `@vizhub/udc` from npm and import its named
+functions. This README describes the 3.1.0 source baseline; check the registry
+version before choosing a package version.
 
 ## Quick start
 
@@ -447,5 +463,3 @@ Failures throw a typed `UdcError` carrying a `UdcErrorCode` (`INVALID`, `LIMIT`,
 UDC is useful without VizHub. Visualization and data platforms may supply their own CSV/TSV bytes, schema revisions, reviewed mappings and provenance. In VizHub AI Studio, authorization, project membership and registry-source access must remain in the hosting application; the standalone library **does not perform authorization**. A source hash is an identity, not an access token.
 
 UDC is MIT-licensed. See [LICENSE](LICENSE) and [NOTICE.md](NOTICE.md).
-
-Queries can explicitly override base-measure aggregation defaults with `aggregationOverrides: [{ measureId: "population", operator: "max" }]` when reducing grain or rolling up a hierarchy. See [query language](docs/query-language.md).

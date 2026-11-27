@@ -82,8 +82,9 @@ Each request includes revision-pinned source metadata, measure dependencies
 
 A provider may expose `pushdown: { capabilities(source), load(request) }`.
 UDC negotiates exact source-local dimension filtering and measure projection,
-and may request aggregation only for one source, no hierarchy rollups,
-no residual dimension filter, and additive/count/average measures. Original
+and may request aggregation only for one source, no hierarchy rollups or
+drill-down, no residual dimension filter, no aggregation overrides, and
+supported measure operators (sum/count/average, plus explicitly negotiated min/max). Original
 grain is retained for federation. All other operators stay in UDC.
 
 The load request includes a backend-neutral `pushdown` plan: exact filters
@@ -110,20 +111,22 @@ The provider and hierarchy inputs must remain immutable during execution.
 
 ## Query properties
 
-| Field              | Meaning                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| version            | Required literal 1                                                                                       |
-| dimensions         | Retained axes, in output order; [] requests scalar grain                                                 |
-| measures           | Nonempty requested output measures, in output order                                                      |
-| filters            | Existing DiceSelection objects: OR within axis, AND across axes, before integration                      |
-| rollups            | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis                       |
-| calculatedMeasures | Multiple CalculatedMeasureDefinitions with acyclic dependencies, evaluated after rollups and aggregation |
-| measureFilter      | Existing structured MeasurePredicate evaluated at final grain                                            |
-| join               | inner (default), full, left or right                                                                     |
-| joinAnchor         | Required for left/right; semantic required measure ID identifying the preserved source                   |
-| topN               | Existing TopNOptions, partitioned on retained axes                                                       |
-| orderBy            | Ordered dimension or measure keys from the requested output                                              |
-| limit              | Global nonnegative integer cap on returned observations (at most 10,000)                                 |
+| Field                | Meaning                                                                                                  |
+| -------------------- | -------------------------------------------------------------------------------------------------------- |
+| version              | Required literal 1                                                                                       |
+| dimensions           | Retained axes, in output order; [] requests scalar grain                                                 |
+| measures             | Nonempty requested output measures, in output order                                                      |
+| filters              | Existing DiceSelection objects: OR within axis, AND across axes, before integration                      |
+| rollups              | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis                       |
+| drilldown            | Explicit hierarchyKey, revision and parentMemberId; one retained hierarchy axis                          |
+| calculatedMeasures   | Multiple CalculatedMeasureDefinitions with acyclic dependencies, evaluated after rollups and aggregation |
+| aggregationOverrides | Explicit base-measure aggregation operators for reductions                                               |
+| measureFilter        | Existing structured MeasurePredicate evaluated at final grain                                            |
+| join                 | inner (default), full, left or right                                                                     |
+| joinAnchor           | Required for left/right; semantic required measure ID identifying the preserved source                   |
+| topN                 | Existing TopNOptions, partitioned on retained axes                                                       |
+| orderBy              | Ordered dimension or measure keys from the requested output                                              |
+| limit                | Global nonnegative integer cap on returned observations (at most 10,000)                                 |
 
 All identifiers are canonical semantic IDs. Dimension ranges are not inferred
 from IDs; enumerate canonical members explicitly. Numeric comparisons, ranges,
@@ -171,13 +174,14 @@ They are not pagination or a replacement for partitioned top-N.
    a physical dataset or silently guess. Require identical canonical grain
    across selected sources. No cross-grain joins or implicit source union.
 3. Project away unused input measures, filter dimensions, integrate sources,
-   apply hierarchical rollups in query order, and aggregate away extra axes.
+   apply aggregation overrides, perform any hierarchy drill-down, apply
+   hierarchical rollups in query order, and aggregate away extra axes.
    Only shared coordinates contribute to inner joins; this is not a guarantee
    of complete coverage. Explicit left/right/full joins retain sparse absence
-   and cannot roll up or aggregate. N-way inner joins intersect all selected
+   and cannot drill down, roll up or aggregate. N-way inner joins intersect all selected
    coordinates, full joins union them, and directional joins retain exactly
    the anchor source's coordinates.
-4. Calculate the derived measure at final grain, apply the measure predicate,
+4. Calculate derived measures in dependency order at final grain, apply the measure predicate,
    select top/bottom N, apply explicit ordering, apply the global limit, and
    project the requested output. Missing and null values retain existing operator
    semantics. Ranking ties use canonical keys.
@@ -220,7 +224,7 @@ sparse results, cross-grain joins, inferred source preferences,
 independent rank metadata, sorting by hidden fields, dataset coverage queries,
 physical loading, authentication, HTTP/MCP endpoints, or application UI.
 Existing lower-level operators remain public for these workflows. No new
-production dependencies. This source change does not publish an npm version.
+production dependencies.
 
 ### Composable calculated measures
 
