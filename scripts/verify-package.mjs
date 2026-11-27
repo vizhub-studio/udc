@@ -26,6 +26,7 @@ for (const name of [
   "AggregatedCube",
   "AggregatedObservation",
   "QuerySpec",
+  "QueryDrilldown",
   "QueryPlan",
   "QueryResult",
   "DataProvider",

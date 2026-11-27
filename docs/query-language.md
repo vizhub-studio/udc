@@ -82,9 +82,9 @@ Each request includes revision-pinned source metadata, measure dependencies
 
 A provider may expose `pushdown: { capabilities(source), load(request) }`.
 UDC negotiates exact source-local dimension filtering and measure projection,
-and may request aggregation only for one source, no hierarchy rollups,
-no residual dimension filter, no aggregation overrides, and supported measure
-operators (sum/count/average, plus explicitly negotiated min/max). Original
+and may request aggregation only for one source, no hierarchy rollups or
+drill-down, no residual dimension filter, no aggregation overrides, and
+supported measure operators (sum/count/average, plus explicitly negotiated min/max). Original
 grain is retained for federation. All other operators stay in UDC.
 
 The load request includes a backend-neutral `pushdown` plan: exact filters
@@ -118,6 +118,7 @@ The provider and hierarchy inputs must remain immutable during execution.
 | measures             | Nonempty requested output measures, in output order                                                      |
 | filters              | Existing DiceSelection objects: OR within axis, AND across axes, before integration                      |
 | rollups              | Explicit hierarchyKey, revision and targetMembers; one hierarchy per retained axis                       |
+| drilldown            | Explicit hierarchyKey, revision and parentMemberId; one retained hierarchy axis                          |
 | calculatedMeasures   | Multiple CalculatedMeasureDefinitions with acyclic dependencies, evaluated after rollups and aggregation |
 | aggregationOverrides | Explicit base-measure aggregation operators for reductions                                               |
 | measureFilter        | Existing structured MeasurePredicate evaluated at final grain                                            |
@@ -173,10 +174,11 @@ They are not pagination or a replacement for partitioned top-N.
    a physical dataset or silently guess. Require identical canonical grain
    across selected sources. No cross-grain joins or implicit source union.
 3. Project away unused input measures, filter dimensions, integrate sources,
-   apply hierarchical rollups in query order, and aggregate away extra axes.
+   apply aggregation overrides, perform any hierarchy drill-down, apply
+   hierarchical rollups in query order, and aggregate away extra axes.
    Only shared coordinates contribute to inner joins; this is not a guarantee
    of complete coverage. Explicit left/right/full joins retain sparse absence
-   and cannot roll up or aggregate. N-way inner joins intersect all selected
+   and cannot drill down, roll up or aggregate. N-way inner joins intersect all selected
    coordinates, full joins union them, and directional joins retain exactly
    the anchor source's coordinates.
 4. Calculate derived measures in dependency order at final grain, apply the measure predicate,
@@ -218,8 +220,8 @@ support forward references and acyclic chains; no arbitrary code. At most 100 de
 node operations, and one million retained calculation contributor entries are allowed.
 Base and calculated intermediate measures share the 100-column budget. Unused definitions,
 duplicate identities, cycles and unresolved operands fail closed. No implicit aggregation of
-sparse results, cross-grain joins, inferred source preferences, drill-down query
-syntax, independent rank metadata, sorting by hidden fields, dataset coverage queries,
+sparse results, cross-grain joins, inferred source preferences,
+independent rank metadata, sorting by hidden fields, dataset coverage queries,
 physical loading, authentication, HTTP/MCP endpoints, or application UI.
 Existing lower-level operators remain public for these workflows. No new
 production dependencies.
@@ -242,3 +244,45 @@ A measure expression can reference any declared calculated measure by ID, irresp
 Overrides apply to selected base measures (including hidden operands) before any hierarchy rollup or dimensional reduction. Operators are sum, count, average, none, min and max; omitted overrides retain source defaults. Explicit overrides may supersede none; application-level semantic governance remains the host's responsibility. Overrides require a reduction, are unique per base measure, and cannot target calculated or unused measures. Count retains the existing derived `measureId:count` output identity. All reduction stages use the same effective operator, with counts subsequently summed. Source definitions and lineage are not mutated. Min/max ignore nulls and retain mergeable extrema plus non-null counts. Sparse outer-join aggregation remains unsupported.
 
 Providers with legacy aggregate capability can execute sum/count/average only. Providers may explicitly opt into min/max via `aggregateOperators`; pushed extrema must return `state: { sum: 0, count, extremum }`, where extremum is null exactly when count is zero. Query overrides conservatively disable aggregation pushdown, but filter/project pushdown remains available. This avoids changing the existing provider request contract. Distinct count, weighted average, per-axis policies, and multiple operators per measure are deferred.
+
+## Declarative drill-down
+
+To expand a hierarchy parent into observed immediate-child totals, use the
+optional `drilldown` object in query version 1:
+
+```json
+{
+  "version": 1,
+  "dimensions": ["geo", "year"],
+  "measures": ["population", "gdp"],
+  "drilldown": {
+    "hierarchyKey": "development-geography",
+    "revision": "v1",
+    "parentMemberId": "usa"
+  }
+}
+```
+
+The example uses the fictional state-grain development fixture, not national
+totals or official state statistics. The host supplies the authorized fine-grain
+source catalog and the same immutable hierarchy revision at planning and
+execution. Planning validates the hierarchy and non-leaf parent without
+acquiring rows; source selection is still by semantic measure and dimension
+IDs, not automatic hierarchy-level inference.
+
+One drill-down is supported per query. Its axis must be retained and cannot
+also have an explicit dimension filter or roll-up. Filters on other axes
+remain valid. Execution filters and integrates at original grain, applies
+query-local aggregation overrides, then uses `drilldownCube` before roll-ups
+on other axes, any remaining dimensional reduction, and calculated measures.
+Count uses the existing derived measure identity.
+
+Only dense inputs are supported. Unknown members, parent or ancestor totals,
+and mixed ancestor/descendant grain in the selected subtree fail closed.
+Missing children are not synthesized; an empty selected subtree returns no
+observations. Original source contributors and hierarchy evidence remain in
+the result. Cross-grain joins and implicit source selection remain unsupported.
+
+Providers may push exact dimension filters and measure projection but must
+not aggregate away detail before drill-down. The executor revalidates the
+serialized plan against the supplied catalog and hierarchy revision.

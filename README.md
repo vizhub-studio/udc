@@ -287,7 +287,8 @@ The v1 query API supports multiple selected source cubes at identical canonical
 grain and multiple composable calculated measures. Source, measure, cumulative input and output
 budgets apply. It does not fetch data on its own, authorize access, convert units, infer hierarchy
 relationships or support sorting by hidden fields. The host
-must supply authorized, immutable inputs and compatible units. Drill-down and
+must supply authorized, immutable inputs and compatible units. Declarative
+hierarchy drill-down is supported with explicitly supplied finer-grained sources;
 coverage queries remain available through the lower-level operators.
 
 Read the [complete query language reference](docs/query-language.md) for every
@@ -312,7 +313,7 @@ npm run example
 The example loads bundled historical sample CSVs for UN population, World Bank GDP, and country-code concordances, then validates, plans, and executes declarative queries for joined observations and ranked GDP per capita. No VizHub server or credentials are required. The [CSV integration tests](test/golden.test.ts) independently join the original rows and verify numerical results, source lineage, regional ratios of totals, missingness, and JSON round-trips. The fixtures and illustrative hierarchy are test evidence, not live or officially approved data.
 The six-dataset development acceptance suite also checks five country-grain
 sources and a fictional 50-state dataset, including national reconciliation,
-explicit aggregation overrides, and low-level hierarchy drill-down.
+explicit aggregation overrides, and low-level and declarative hierarchy drill-down.
 
 Application consumers can install `@vizhub/udc` from npm and import its named
 functions. This README describes the 3.1.0 source baseline; check the registry

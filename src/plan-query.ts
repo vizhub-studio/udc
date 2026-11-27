@@ -109,6 +109,31 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
     ...(query.filters ?? []).map((f) => f.dimensionId),
   ]);
   const hierarchyAxes = new Set<string>();
+  if (query.drilldown) {
+    const { hierarchyKey, revision, parentMemberId } = query.drilldown;
+    const matches = (catalog.hierarchies ?? []).filter(
+      (h) => h.key === hierarchyKey && h.revision === revision,
+    );
+    if (matches.length !== 1)
+      fail(
+        matches.length ? "CONFLICT" : "UNRESOLVED",
+        "Drill-down hierarchy revision not uniquely resolved",
+      );
+    const hierarchy = matches[0];
+    const axis = hierarchy.dimensionId;
+    if (!query.dimensions.includes(axis))
+      fail("INCOMPATIBLE", "Drill-down axis must be retained");
+    if (query.filters?.some((f) => f.dimensionId === axis))
+      fail("INCOMPATIBLE", "Cannot filter the drill-down axis");
+    assertBound(hierarchy.edges.length, UDC_LIMITS.rows, "hierarchy edges");
+    if (!hierarchy.edges.some((edge) => edge.parent.id === parentMemberId)) {
+      if (hierarchy.edges.some((edge) => edge.child.id === parentMemberId))
+        fail("INCOMPATIBLE", "Cannot drill down a leaf");
+      fail("UNRESOLVED", "Unknown drill-down parent");
+    }
+    hierarchyAxes.add(axis);
+    requiredAxes.add(axis);
+  }
   for (const rollup of query.rollups ?? []) {
     const matches = (catalog.hierarchies ?? []).filter(
       (h) => h.key === rollup.hierarchyKey && h.revision === rollup.revision,
@@ -204,9 +229,12 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   if (planSources.some((s) => !same(s.source.dimensions, grain)))
     fail("INCOMPATIBLE", "Sources must share identical canonical grain");
   const aggregate = !same(grain, query.dimensions);
-  const rollup = hierarchyAxes.size > 0;
+  const hierarchyReduction = hierarchyAxes.size > 0;
   const join = query.join ?? "inner";
-  if (join !== "inner" && (planSources.length < 2 || aggregate || rollup))
+  if (
+    join !== "inner" &&
+    (planSources.length < 2 || aggregate || hierarchyReduction)
+  )
     fail(
       "INCOMPATIBLE",
       "Outer joins require at least two sources and unchanged grain (no rollups)",
@@ -230,7 +258,7 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
         "INCOMPATIBLE",
         "Aggregation override requires a selected base measure: " + id,
       );
-    if (!aggregate && !rollup)
+    if (!aggregate && !hierarchyReduction)
       fail("INCOMPATIBLE", "Aggregation override requires a reduction");
   }
   if (rawIds.some((id) => calculatedIds.has(id)))
@@ -239,7 +267,7 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
     s.source.measures
       .filter((m) => s.measureIds.includes(m.id))
       .map((m) =>
-        (aggregate || rollup) &&
+        (aggregate || hierarchyReduction) &&
         (overrides.get(m.id) ?? m.aggregation) === "count"
           ? m.id + ":count"
           : m.id,
@@ -258,7 +286,8 @@ export function planQuery(query: QuerySpec, catalog: QueryCatalog): QueryPlan {
   const steps: QueryStep[] = [];
   if (query.filters?.length) steps.push("filter-dimensions");
   if (planSources.length > 1) steps.push("integrate");
-  if (rollup) steps.push("rollup");
+  if (query.drilldown) steps.push("drilldown");
+  if (query.rollups?.length) steps.push("rollup");
   if (aggregate) steps.push("aggregate");
   if (calculations.length) steps.push("calculate");
   if (query.measureFilter) steps.push("filter-measures");

@@ -25,6 +25,13 @@ export interface QueryRollup {
   targetMembers: readonly string[];
 }
 
+/** Expand one hierarchy parent from observed finer-grained source data. */
+export interface QueryDrilldown {
+  hierarchyKey: string;
+  revision: string;
+  parentMemberId: string;
+}
+
 /** Ordered output field; earlier entries take precedence. */
 export type QueryOrder =
   | { kind: "dimension"; dimensionId: string; direction: "asc" | "desc" }
@@ -43,6 +50,7 @@ export interface QuerySpec {
   measures: readonly string[];
   aggregationOverrides?: readonly AggregationOverride[];
   filters?: readonly DiceSelection[];
+  drilldown?: QueryDrilldown;
   rollups?: readonly QueryRollup[];
   calculatedMeasures?: readonly CalculatedMeasureDefinition[];
   measureFilter?: MeasurePredicate;
@@ -73,6 +81,7 @@ export interface QueryPlanSource {
 export type QueryStep =
   | "filter-dimensions"
   | "integrate"
+  | "drilldown"
   | "rollup"
   | "aggregate"
   | "calculate"

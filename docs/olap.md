@@ -98,6 +98,9 @@ Here the hierarchy must have countries as immediate children of the selected par
 
 An inner join here summarizes only the shared observed coordinates, not the complete population of a region. Use only data whose coverage and units support the intended interpretation.
 
+For declarative access to drill-down through the query API, see the
+[drill-down query syntax](query-language.md#declarative-drill-down).
+
 The deterministic golden workflow in `test/olap.test.ts` exercises this composition with synthetic fixtures. The operations are library-only; no application UI, data loader or database is introduced.
 
 ### Multiple calculated measures

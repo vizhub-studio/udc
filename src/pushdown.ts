@@ -22,6 +22,7 @@ export function planSourcePushdown(
     plan.sources.length === 1 &&
     plan.steps.includes("aggregate") &&
     !plan.steps.includes("rollup") &&
+    !plan.steps.includes("drilldown") &&
     filters.length === (plan.query.filters ?? []).length &&
     measureIds.length === selected.measureIds.length &&
     selected.source.measures
